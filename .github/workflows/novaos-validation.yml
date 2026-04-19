@@ -1,0 +1,43 @@
+name: NovaOS Validation
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      ROOT_DIR: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust target
+        run: rustup target add aarch64-unknown-uefi
+
+      - name: Install QEMU and UEFI firmware
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-aarch64 qemu-efi-aarch64
+
+      - name: Environment check
+        run: ./scripts/novaos-env-check.sh
+
+      - name: Local validation
+        run: ./ci/validate-local.sh
+
+      - name: Generate validation report
+        run: ./scripts/novaos-report.sh
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: novaos-validation-reports
+          path: artifacts/reports/

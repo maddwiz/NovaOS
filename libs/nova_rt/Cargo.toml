@@ -1,0 +1,13 @@
+[package]
+name = "nova_rt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+nova_fabric = { path = "../nova_fabric" }
+sha2 = { workspace = true }

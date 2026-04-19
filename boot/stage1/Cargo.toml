@@ -1,0 +1,23 @@
+[package]
+name = "novaos-stage1"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "stage1-payload"
+path = "src/bin/stage1_payload.rs"
+
+[dependencies]
+nova_rt = { path = "../../libs/nova_rt" }
+
+[features]
+default = []
+qemu_virt_trace = []
+qemu_semihosting = []
+bootstrap_trap_vector_trace = []
+bootstrap_kernel_svc_probe = []
+bootstrap_pretransfer_svc_probe = []

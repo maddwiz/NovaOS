@@ -1,0 +1,10 @@
+[package]
+name = "novaos-mkimage"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+nova_rt = { path = "../../libs/nova_rt" }

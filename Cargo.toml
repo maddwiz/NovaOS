@@ -1,0 +1,41 @@
+[workspace]
+members = [
+    "boot/mkimage",
+    "boot/efi-aa64/spark-observe",
+    "boot/efi-aa64/novaaa64",
+    "drivers/bus/pci",
+    "kernel/arch/x86_64",
+    "libs/nova_fabric",
+    "libs/nova_rt",
+    "boot/stage1",
+    "kernel/arch/arm64",
+    "apps/initd",
+    "services/acceld",
+    "services/memd",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+version = "0.1.0"
+authors = ["NovaOS contributors"]
+repository = "https://example.invalid/NovaOS"
+
+[workspace.dependencies]
+bitflags = "2.9.0"
+crc32fast = { version = "1.4.2", default-features = false }
+postcard = { version = "1.1.3", default-features = false, features = ["alloc"] }
+serde = { version = "1.0.228", default-features = false, features = ["derive"] }
+sha2 = { version = "0.10.9", default-features = false }
+spin = "0.10.0"
+thiserror = { version = "2.0.17", default-features = false }
+uefi = { version = "0.35.0", default-features = false, features = ["alloc", "global_allocator", "logger", "panic_handler"] }
+uefi-raw = "0.11.0"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+lto = "thin"
+panic = "abort"

@@ -1,0 +1,9 @@
+[package]
+name = "nova_fabric"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+bitflags = { workspace = true }

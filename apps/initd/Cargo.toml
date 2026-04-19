@@ -1,0 +1,19 @@
+[package]
+name = "novaos-initd"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "initd-payload"
+path = "src/bin/initd_payload.rs"
+
+[features]
+default = []
+qemu_virt_trace = []
+qemu_semihosting = []
+bootstrap_trap_probe = []
+bootstrap_svc_probe = []
+
+[dependencies]
+nova_rt = { path = "../../libs/nova_rt" }

@@ -128,6 +128,7 @@ static mut BOOTSTRAP_KERNEL_SVC_CALLER_CAPTURE: BootstrapKernelSvcCallerCapture 
 enum BootstrapTaskTransferMode {
     SameEl,
     DropToEl1,
+    DropToEl0,
 }
 
 #[cfg(any(test, all(target_os = "none", target_arch = "aarch64")))]
@@ -136,6 +137,7 @@ impl BootstrapTaskTransferMode {
         match self {
             Self::SameEl => "same-el",
             Self::DropToEl1 => "drop-to-el1",
+            Self::DropToEl0 => "drop-to-el0",
         }
     }
 }
@@ -182,6 +184,7 @@ const fn bootstrap_task_boundary_plan(current_el: u8) -> BootstrapTaskBoundaryPl
     let transfer_mode = bootstrap_task_transfer_mode(current_el);
     let target_el = match transfer_mode {
         BootstrapTaskTransferMode::DropToEl1 => 1,
+        BootstrapTaskTransferMode::DropToEl0 => 0,
         BootstrapTaskTransferMode::SameEl => current_el,
     };
 
@@ -191,6 +194,17 @@ const fn bootstrap_task_boundary_plan(current_el: u8) -> BootstrapTaskBoundaryPl
         transfer_mode,
         task_isolated: false,
         syscall_boundary: BootstrapTaskSyscallBoundary::CurrentElSvc,
+    }
+}
+
+#[cfg(any(test, all(target_os = "none", target_arch = "aarch64")))]
+const fn bootstrap_task_target_boundary_plan(current_el: u8) -> BootstrapTaskBoundaryPlan {
+    BootstrapTaskBoundaryPlan {
+        current_el,
+        target_el: 0,
+        transfer_mode: BootstrapTaskTransferMode::DropToEl0,
+        task_isolated: true,
+        syscall_boundary: BootstrapTaskSyscallBoundary::El0Svc,
     }
 }
 
@@ -815,6 +829,8 @@ fn enter_bootstrap_task<C: ConsoleSink>(
     };
     let boundary_plan = bootstrap_task_boundary_plan(read_runtime_current_el());
     log_bootstrap_task_boundary(console, boundary_plan);
+    let target_boundary_plan = bootstrap_task_target_boundary_plan(boundary_plan.current_el);
+    log_bootstrap_task_target_boundary(console, target_boundary_plan);
     #[cfg(feature = "bootstrap_pretransfer_svc_probe")]
     {
         let _ = payload_entry;
@@ -1273,6 +1289,7 @@ unsafe fn enter_bootstrap_task_with_stack(
         BootstrapTaskTransferMode::DropToEl1 => unsafe {
             enter_bootstrap_task_via_el1(entry, context, stack_top)
         },
+        BootstrapTaskTransferMode::DropToEl0 => panic::halt(),
     }
 }
 
@@ -1284,6 +1301,27 @@ fn log_bootstrap_task_boundary<C: ConsoleSink>(
     console.write_str("[info] bootstrap task boundary ");
     console.write_line(boundary_plan.transfer_mode.label());
     console.write_str("[info] bootstrap task boundary current_el ");
+    write_hex_u64(console, boundary_plan.current_el as u64);
+    console.write_str(" target_el ");
+    write_hex_u64(console, boundary_plan.target_el as u64);
+    console.write_str(" isolated ");
+    if boundary_plan.task_isolated {
+        console.write_str("true");
+    } else {
+        console.write_str("false");
+    }
+    console.write_str(" syscall ");
+    console.write_line(boundary_plan.syscall_boundary.label());
+}
+
+#[cfg(all(target_os = "none", target_arch = "aarch64"))]
+fn log_bootstrap_task_target_boundary<C: ConsoleSink>(
+    console: &mut C,
+    boundary_plan: BootstrapTaskBoundaryPlan,
+) {
+    console.write_str("[info] bootstrap task target boundary ");
+    console.write_line(boundary_plan.transfer_mode.label());
+    console.write_str("[info] bootstrap task target boundary current_el ");
     write_hex_u64(console, boundary_plan.current_el as u64);
     console.write_str(" target_el ");
     write_hex_u64(console, boundary_plan.target_el as u64);
@@ -1827,9 +1865,10 @@ mod tests {
         BootstrapCapsuleSummary, BootstrapTaskBoundaryPlan, BootstrapTaskLaunchPlan,
         BootstrapTaskSyscallBoundary, BootstrapTaskTransferMode, NovaBootInfoV1, NovaBootInfoV2,
         NovaImageDigestV1, NovaVerificationInfoV1, bootstrap_syscall_dispatch_state,
-        bootstrap_task_boundary_plan, bootstrap_task_transfer_mode, dispatch_bootstrap_kernel_call,
-        prepare_bringup, resolve_boot_info, resolve_boot_info_v2, resolve_kernel_image_digest,
-        resolve_memory_map, resolve_optional_boot_info_v2, resolve_verification_info,
+        bootstrap_task_boundary_plan, bootstrap_task_target_boundary_plan,
+        bootstrap_task_transfer_mode, dispatch_bootstrap_kernel_call, prepare_bringup,
+        resolve_boot_info, resolve_boot_info_v2, resolve_kernel_image_digest, resolve_memory_map,
+        resolve_optional_boot_info_v2, resolve_verification_info,
         run_lower_el_bootstrap_svc_dry_run,
     };
     use crate::bootinfo::{BootSource, FramebufferFormat};
@@ -2141,6 +2180,21 @@ mod tests {
                 syscall_boundary: BootstrapTaskSyscallBoundary::CurrentElSvc,
             }
         );
+    }
+
+    #[test]
+    fn bootstrap_task_target_boundary_plan_tracks_isolated_el0_goal() {
+        assert_eq!(
+            bootstrap_task_target_boundary_plan(1),
+            BootstrapTaskBoundaryPlan {
+                current_el: 1,
+                target_el: 0,
+                transfer_mode: BootstrapTaskTransferMode::DropToEl0,
+                task_isolated: true,
+                syscall_boundary: BootstrapTaskSyscallBoundary::El0Svc,
+            }
+        );
+        assert_eq!(BootstrapTaskTransferMode::DropToEl0.label(), "drop-to-el0");
     }
 
     #[test]

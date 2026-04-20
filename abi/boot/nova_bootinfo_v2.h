@@ -83,6 +83,14 @@ typedef struct NovaBootstrapPayloadDescriptorV1 {
     uint64_t entry_point;
 } NovaBootstrapPayloadDescriptorV1;
 
+typedef struct NovaBootstrapUserWindowDescriptorV1 {
+    uint64_t base;
+    uint64_t len;
+    uint64_t stack_size;
+    uint32_t page_size;
+    uint32_t flags; /* Reserved; must be zero in the current draft. */
+} NovaBootstrapUserWindowDescriptorV1;
+
 typedef struct NovaAccelMmioWindowV1 {
     uint64_t base;
     uint64_t len;
@@ -160,6 +168,7 @@ typedef struct NovaBootInfoV2 {
     uint64_t boot_counter;
     uint64_t observatory_hash_ptr;
     NovaBootstrapPayloadDescriptorV1 bootstrap_payload;
+    NovaBootstrapUserWindowDescriptorV1 bootstrap_user_window;
 } NovaBootInfoV2;
 
 static inline void nova_bootinfo_v2_init(NovaBootInfoV2 *info) {
@@ -172,6 +181,12 @@ static inline void nova_bootinfo_v2_init(NovaBootInfoV2 *info) {
         .version = NOVA_BOOTINFO_V2_VERSION,
     };
 }
+
+_Static_assert(sizeof(NovaBootstrapPayloadDescriptorV1) == 40, "unexpected bootstrap payload descriptor layout");
+_Static_assert(sizeof(NovaBootstrapUserWindowDescriptorV1) == 32, "unexpected bootstrap user window descriptor layout");
+_Static_assert(sizeof(NovaBootInfoV2) == 344, "NovaBootInfoV2 layout must stay stable");
+_Static_assert(offsetof(NovaBootInfoV2, bootstrap_payload) == 272, "unexpected NovaBootInfoV2 layout");
+_Static_assert(offsetof(NovaBootInfoV2, bootstrap_user_window) == 312, "unexpected NovaBootInfoV2 layout");
 
 #ifdef __cplusplus
 }

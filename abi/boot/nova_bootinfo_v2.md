@@ -30,6 +30,9 @@ Compared with v1, the draft adds:
 - `boot_counter`
 - `observatory_hash_ptr`
 - `bootstrap_payload`
+- `bootstrap_user_window`
+
+`bootstrap_user_window` is empty by default. When present, it describes the initial 4 KiB page-aligned EL0 bootstrap user window and stack reservation that the kernel may use to rebase the embedded bootstrap payload instead of treating firmware config-table fields as a user address-space contract. Its `flags` field is reserved and must be zero in the current draft.
 
 ## Accelerator seed doctrine
 

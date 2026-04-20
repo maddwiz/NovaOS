@@ -529,7 +529,7 @@ pub fn prepare_bringup(
             .map(NovaVerificationInfoV1::kernel_payload_verified)
             .unwrap_or(false),
         exception_vectors: ExceptionVectors::runtime(),
-        page_tables: PageTablePlan::from_boot_info(boot_info),
+        page_tables: PageTablePlan::from_boot_info_with_v2(boot_info, boot_info_v2),
         allocator: FrameAllocatorPlan::from_boot_info(boot_info),
     })
 }
@@ -904,7 +904,11 @@ fn log_bootstrap_el0_mapping_plan<C: ConsoleSink>(
         launch_plan.entry_point,
         context as usize as u64,
         context_size,
-        (BOOTSTRAP_TASK_STACK_SIZE / 2) as u64,
+        if page_tables.user_stack_size == 0 {
+            (BOOTSTRAP_TASK_STACK_SIZE / 2) as u64
+        } else {
+            page_tables.user_stack_size
+        },
     );
     let plan = page_tables.bootstrap_el0_mapping_plan(request);
 
@@ -2072,6 +2076,7 @@ mod tests {
         assert_eq!(bringup.page_tables.kernel_size, 4 * 48);
         assert_eq!(bringup.page_tables.user_base, 0x2000);
         assert_eq!(bringup.page_tables.user_size, 3);
+        assert_eq!(bringup.page_tables.user_stack_size, 0);
         assert_eq!(bringup.allocator.usable_base, init_capsule.as_ptr() as u64);
         assert_eq!(bringup.allocator.usable_limit, init_capsule_len() as u64);
         assert_eq!(bringup.allocator.reserved_bytes, 0x5000);

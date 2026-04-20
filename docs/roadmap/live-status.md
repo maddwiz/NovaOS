@@ -14,9 +14,9 @@ Open this first when resuming NovaOS from another Codex session.
 
 - active_phase: M0 portability refactor with Spark boot continuity
 - repo_root: /home/nova/NovaOS
-- latest_report_generated_at_utc: 20260420T165628Z
-- latest_loop_timestamp_utc: 20260420T165034Z
-- latest_loop_iteration: 5117
+- latest_report_generated_at_utc: 20260420T165714Z
+- latest_loop_timestamp_utc: 20260420T165629Z
+- latest_loop_iteration: 5118
 
 ## Durable Baseline
 
@@ -67,9 +67,9 @@ Open this first when resuming NovaOS from another Codex session.
 - bootstrap_el0_diagnostic_status: svc_returned_to_el0_spin
 - bootstrap_svc_diagnostic_status: returned
 - bootstrap_trap_diagnostic_status: returned
-- latest_report: /home/nova/NovaOS/artifacts/reports/novaos-report-20260420T165628Z.md
-- latest_loop_log: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260420T165034Z.log
-- latest_loop_summary: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260420T165034Z.summary
+- latest_report: /home/nova/NovaOS/artifacts/reports/novaos-report-20260420T165714Z.md
+- latest_loop_log: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260420T165629Z.log
+- latest_loop_summary: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260420T165629Z.summary
 - latest_bootstrap_kernel_svc_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-kernel-svc-diagnostic-20260418T151843Z.log
 - latest_bootstrap_pretransfer_svc_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-pretransfer-svc-diagnostic-20260418T151905Z.log
 - latest_bootstrap_el0_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-el0-diagnostic-20260420T165625Z.log

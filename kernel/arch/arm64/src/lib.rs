@@ -27,6 +27,8 @@ use arch::arm64::exceptions::{
     BootstrapExceptionReturnCapture, read_bootstrap_exception_return_capture,
     reset_bootstrap_exception_return_capture,
 };
+#[cfg(all(target_os = "none", target_arch = "aarch64"))]
+use arch::arm64::mmu::BootstrapEl0MappingRequest;
 use arch::arm64::mmu::PageTablePlan;
 use bootinfo::{
     BootSource, FramebufferFormat, NovaBootInfoV1, NovaBootInfoV2, NovaImageDigestV1,
@@ -444,7 +446,12 @@ pub fn kernel_main<C: ConsoleSink>(context: KernelContext<'_, C>) -> ! {
         if let Some(launch_plan) = bootstrap_launch_plan {
             context.console.write_str("[info] bootstrap task transfer ");
             context.console.write_line(launch_plan.service_name());
-            enter_bootstrap_task(context.console, launch_plan, bringup.init_capsule);
+            enter_bootstrap_task(
+                context.console,
+                launch_plan,
+                bringup.init_capsule,
+                bringup.page_tables,
+            );
         }
     }
 
@@ -828,6 +835,7 @@ fn enter_bootstrap_task<C: ConsoleSink>(
     console: &mut C,
     launch_plan: BootstrapTaskLaunchPlan,
     init_capsule: Option<BootstrapCapsuleSummary>,
+    page_tables: PageTablePlan,
 ) -> ! {
     sync_instruction_cache(
         launch_plan.image_base as *const u8,
@@ -836,6 +844,7 @@ fn enter_bootstrap_task<C: ConsoleSink>(
     let context = init_capsule
         .map(build_bootstrap_task_context)
         .unwrap_or(core::ptr::null());
+    log_bootstrap_el0_mapping_plan(console, launch_plan, context, page_tables);
     let payload_entry: BootstrapTaskEntry = unsafe {
         core::mem::transmute::<usize, BootstrapTaskEntry>(launch_plan.entry_point as usize)
     };
@@ -869,11 +878,38 @@ fn enter_bootstrap_task<C: ConsoleSink>(
     console: &mut C,
     _launch_plan: BootstrapTaskLaunchPlan,
     _init_capsule: Option<BootstrapCapsuleSummary>,
+    _page_tables: PageTablePlan,
 ) -> ! {
     panic::log_and_halt(
         console,
         "bootstrap task transfer is not supported on host builds",
     );
+}
+
+#[cfg(all(target_os = "none", target_arch = "aarch64"))]
+fn log_bootstrap_el0_mapping_plan<C: ConsoleSink>(
+    console: &mut C,
+    launch_plan: BootstrapTaskLaunchPlan,
+    context: *const NovaBootstrapTaskContextV1,
+    page_tables: PageTablePlan,
+) {
+    let context_size = if context.is_null() {
+        0
+    } else {
+        size_of::<NovaBootstrapTaskContextV2>() as u64
+    };
+    let request = BootstrapEl0MappingRequest::new(
+        launch_plan.load_base,
+        launch_plan.load_size,
+        launch_plan.entry_point,
+        context as usize as u64,
+        context_size,
+        (BOOTSTRAP_TASK_STACK_SIZE / 2) as u64,
+    );
+    let plan = page_tables.bootstrap_el0_mapping_plan(request);
+
+    console.write_str("[info] bootstrap el0 mapping ");
+    console.write_line(plan.readiness.label());
 }
 
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]

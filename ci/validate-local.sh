@@ -23,6 +23,7 @@ for script in \
   "${ROOT_DIR}/scripts/novaos-report.sh" \
   "${ROOT_DIR}/scripts/novaos-ci-loop.sh" \
   "${ROOT_DIR}/scripts/run-qemu-novaaa64-bootstrap-kernel-svc-diagnostic.sh" \
+  "${ROOT_DIR}/scripts/run-qemu-novaaa64-bootstrap-el0-diagnostic.sh" \
   "${ROOT_DIR}/scripts/run-qemu-novaaa64-bootstrap-trap-diagnostic.sh" \
   "${ROOT_DIR}/scripts/run-qemu-novaaa64-bootstrap-svc-diagnostic.sh" \
   "${ROOT_DIR}/scripts/run-qemu-novaaa64-bootstrap-pretransfer-svc-diagnostic.sh" \
@@ -67,6 +68,12 @@ printf 'payload_kernel_svc_probe_build=pass\n'
 PAYLOAD_FEATURES="qemu_virt_trace,bootstrap_trap_vector_trace,bootstrap_pretransfer_svc_probe" \
   "${ROOT_DIR}/scripts/build-kernel.sh" >/dev/null
 printf 'payload_pretransfer_svc_probe_build=pass\n'
+PAYLOAD_FEATURES="qemu_virt_trace,bootstrap_trap_vector_trace,bootstrap_el0_probe" \
+  "${ROOT_DIR}/scripts/build-kernel.sh" >/dev/null
+printf 'payload_el0_probe_build=pass\n'
+INITD_FEATURES="qemu_virt_trace,bootstrap_svc_probe,bootstrap_el0_probe" \
+  "${ROOT_DIR}/scripts/build-initd.sh" >/dev/null
+printf 'initd_el0_probe_build=pass\n'
 "${ROOT_DIR}/scripts/validate-payloads.sh"
 esp_test_dir="$(mktemp -d)"
 init_capsule_build_path="$(mktemp)"

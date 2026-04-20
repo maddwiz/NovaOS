@@ -307,6 +307,23 @@ pub fn handle_lower_el_bootstrap_syscall_exception<C: ConsoleSink>(
     let state = bootstrap_syscall_state();
     let syndrome = ExceptionSyndrome::from_esr(esr);
     if syndrome.class != ExceptionClass::Svc64 {
+        match syndrome.class {
+            ExceptionClass::InstructionAbortLowerEl => console.log(
+                LogLevel::Warn,
+                "bootstrap lower-el sync exception instruction_abort_lower_el",
+            ),
+            ExceptionClass::DataAbortLowerEl => console.log(
+                LogLevel::Warn,
+                "bootstrap lower-el sync exception data_abort_lower_el",
+            ),
+            ExceptionClass::Brk64 => {
+                console.log(LogLevel::Warn, "bootstrap lower-el sync exception brk64")
+            }
+            ExceptionClass::Unknown => {
+                console.log(LogLevel::Warn, "bootstrap lower-el sync exception unknown")
+            }
+            ExceptionClass::Svc64 => {}
+        }
         return false;
     }
 
@@ -874,7 +891,11 @@ mod tests {
 
         assert!(!handled);
         assert_eq!(frame.elr, 0x4000);
-        assert_eq!(console.as_str(), "");
+        assert!(
+            console
+                .as_str()
+                .contains("bootstrap lower-el sync exception brk64")
+        );
     }
 
     struct RecordingConsole {

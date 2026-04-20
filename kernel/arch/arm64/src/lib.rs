@@ -66,6 +66,18 @@ type BootstrapTaskEntry = unsafe extern "C" fn(*const NovaBootstrapTaskContextV1
 const BOOTSTRAP_TASK_STACK_SIZE: usize = 64 * 1024;
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]
 const SPSR_EL2_MASKED_EL1H: usize = 0x3c5;
+#[cfg(all(
+    target_os = "none",
+    target_arch = "aarch64",
+    feature = "bootstrap_el0_probe"
+))]
+const SPSR_EL1_MASKED_EL0T: usize = 0x3c0;
+#[cfg(all(
+    target_os = "none",
+    target_arch = "aarch64",
+    feature = "bootstrap_el0_probe"
+))]
+const SCTLR_EL1_MMU_CACHE_ENABLE_MASK: usize = 0x1005;
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]
 const HCR_EL2_RW: usize = 1usize << 31;
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]
@@ -831,6 +843,10 @@ fn enter_bootstrap_task<C: ConsoleSink>(
     log_bootstrap_task_boundary(console, boundary_plan);
     let target_boundary_plan = bootstrap_task_target_boundary_plan(boundary_plan.current_el);
     log_bootstrap_task_target_boundary(console, target_boundary_plan);
+    #[cfg(feature = "bootstrap_el0_probe")]
+    let transfer_boundary_plan = target_boundary_plan;
+    #[cfg(not(feature = "bootstrap_el0_probe"))]
+    let transfer_boundary_plan = boundary_plan;
     #[cfg(feature = "bootstrap_pretransfer_svc_probe")]
     {
         let _ = payload_entry;
@@ -838,13 +854,13 @@ fn enter_bootstrap_task<C: ConsoleSink>(
             enter_bootstrap_task_with_stack(
                 bootstrap_pretransfer_svc_probe_entry,
                 context,
-                boundary_plan,
+                transfer_boundary_plan,
             )
         }
     }
     #[cfg(not(feature = "bootstrap_pretransfer_svc_probe"))]
     unsafe {
-        enter_bootstrap_task_with_stack(payload_entry, context, boundary_plan)
+        enter_bootstrap_task_with_stack(payload_entry, context, transfer_boundary_plan)
     }
 }
 
@@ -1277,18 +1293,27 @@ unsafe fn enter_bootstrap_task_with_stack(
     context: *const NovaBootstrapTaskContextV1,
     boundary_plan: BootstrapTaskBoundaryPlan,
 ) -> ! {
-    let stack_top = unsafe {
-        ((core::ptr::addr_of_mut!(BOOTSTRAP_TASK_STACK) as *mut u8).add(BOOTSTRAP_TASK_STACK_SIZE)
-            as usize)
-            & !0xfusize
+    let el1_stack_top = unsafe {
+        let stack_base = core::ptr::addr_of_mut!(BOOTSTRAP_TASK_STACK) as *mut u8;
+        (stack_base.add(BOOTSTRAP_TASK_STACK_SIZE) as usize) & !0xfusize
+    };
+    #[cfg(feature = "bootstrap_el0_probe")]
+    let el0_stack_top = unsafe {
+        let stack_base = core::ptr::addr_of_mut!(BOOTSTRAP_TASK_STACK) as *mut u8;
+        (stack_base.add(BOOTSTRAP_TASK_STACK_SIZE / 2) as usize) & !0xfusize
     };
     match boundary_plan.transfer_mode {
         BootstrapTaskTransferMode::SameEl => unsafe {
-            enter_bootstrap_task_same_el(entry, context, stack_top)
+            enter_bootstrap_task_same_el(entry, context, el1_stack_top)
         },
         BootstrapTaskTransferMode::DropToEl1 => unsafe {
-            enter_bootstrap_task_via_el1(entry, context, stack_top)
+            enter_bootstrap_task_via_el1(entry, context, el1_stack_top)
         },
+        #[cfg(feature = "bootstrap_el0_probe")]
+        BootstrapTaskTransferMode::DropToEl0 => unsafe {
+            enter_bootstrap_task_via_el0(entry, context, el0_stack_top, el1_stack_top)
+        },
+        #[cfg(not(feature = "bootstrap_el0_probe"))]
         BootstrapTaskTransferMode::DropToEl0 => panic::halt(),
     }
 }
@@ -1424,6 +1449,52 @@ unsafe fn enter_bootstrap_task_via_el1(
             in("x10") stack_top,
             in("x11") SPSR_EL2_MASKED_EL1H,
             in("x12") HCR_EL2_RW,
+            options(noreturn),
+        );
+    }
+}
+
+#[cfg(all(
+    target_os = "none",
+    target_arch = "aarch64",
+    feature = "bootstrap_el0_probe"
+))]
+unsafe fn enter_bootstrap_task_via_el0(
+    entry: BootstrapTaskEntry,
+    context: *const NovaBootstrapTaskContextV1,
+    el0_stack_top: usize,
+    el1_stack_top: usize,
+) -> ! {
+    unsafe {
+        core::arch::asm!(
+            "msr SPSel, #1",
+            "isb",
+            "mov sp, x12",
+            "msr sp_el0, x10",
+            "msr elr_el1, x9",
+            "msr spsr_el1, x11",
+            "mrs x13, sctlr_el1",
+            "bic x13, x13, x14",
+            "dsb sy",
+            "msr sctlr_el1, x13",
+            "isb",
+            "mov x1, xzr",
+            "mov x2, xzr",
+            "mov x3, xzr",
+            "mov x4, xzr",
+            "mov x5, xzr",
+            "mov x6, xzr",
+            "mov x7, xzr",
+            "mov x8, xzr",
+            "mov x29, xzr",
+            "mov x30, xzr",
+            "eret",
+            in("x0") context as usize,
+            in("x9") entry as usize,
+            in("x10") el0_stack_top,
+            in("x11") SPSR_EL1_MASKED_EL0T,
+            in("x12") el1_stack_top,
+            in("x14") SCTLR_EL1_MMU_CACHE_ENABLE_MASK,
             options(noreturn),
         );
     }

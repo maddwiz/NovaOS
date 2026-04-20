@@ -31,6 +31,7 @@ latest_status_file="${REPORT_DIR}/latest-status.txt"
 latest_loop_status_file="${REPORT_DIR}/latest-loop-status.txt"
 latest_kernel_svc_diagnostic_status_file="${REPORT_DIR}/latest-bootstrap-kernel-svc-diagnostic-status.txt"
 latest_pretransfer_svc_diagnostic_status_file="${REPORT_DIR}/latest-bootstrap-pretransfer-svc-diagnostic-status.txt"
+latest_el0_diagnostic_status_file="${REPORT_DIR}/latest-bootstrap-el0-diagnostic-status.txt"
 latest_trap_diagnostic_status_file="${REPORT_DIR}/latest-bootstrap-trap-diagnostic-status.txt"
 latest_svc_diagnostic_status_file="${REPORT_DIR}/latest-bootstrap-svc-diagnostic-status.txt"
 
@@ -52,6 +53,8 @@ kernel_svc_caller_capture_matched="$(read_status_value "${latest_kernel_svc_diag
 kernel_svc_caller_capture_mismatch="$(read_status_value "${latest_kernel_svc_diagnostic_status_file}" "caller_capture_mismatch" "unknown")"
 pretransfer_svc_diagnostic_status="$(read_status_value "${latest_pretransfer_svc_diagnostic_status_file}" "overall_status" "not_run")"
 pretransfer_svc_diagnostic_log="$(read_status_value "${latest_pretransfer_svc_diagnostic_status_file}" "log_file")"
+el0_diagnostic_status="$(read_status_value "${latest_el0_diagnostic_status_file}" "overall_status" "not_run")"
+el0_diagnostic_log="$(read_status_value "${latest_el0_diagnostic_status_file}" "log_file")"
 trap_diagnostic_status="$(read_status_value "${latest_trap_diagnostic_status_file}" "overall_status" "not_run")"
 trap_diagnostic_log="$(read_status_value "${latest_trap_diagnostic_status_file}" "log_file")"
 svc_diagnostic_status="$(read_status_value "${latest_svc_diagnostic_status_file}" "overall_status" "not_run")"
@@ -91,7 +94,7 @@ Open this first when resuming NovaOS from another Codex session.
 - \`abi/syscall/nova_syscall_v1.h\` and \`nova_rt\` now define the first typed syscall ABI draft, and \`kernel/arch/arm64\` now carries the Arm64 \`svc\` scaffold dispatcher, bound to a concrete current bootstrap task and bounded by bootstrap endpoint/shared-memory quotas, with the installed bootstrap runtime now marking the first reserved bootstrap endpoint and shared-memory lanes ready when the capsule grants them and those lanes returning real kernel-owned results in the QEMU probe
 - \`boot/mkimage\` now pads kernel payload images to an alignment-safe \`load_offset\`, so stage1's existing in-place \`load_base\` contract lands the live Arm64 kernel body on a vector-safe address, and the kernel also retains a runtime-aligned exception-vector fallback for narrower diagnostics
 - \`init.capsule\` now builds as a typed \`InitCapsule v1\` artifact with an embedded bootstrap service payload body, stage0/stage1 validate it before handoff continues, stage0 snapshots that embedded payload into the transitional \`BootInfo v2\` sidecar, and the raw Arm64 kernel records a compact bootstrap task summary from the capsule header in QEMU, surfaces the current bootstrap task identity, derives a first launch plan from the validated sidecar descriptor, and performs the first in-place bootstrap payload transfer on a dedicated stack with a typed bootstrap context in \`x0\` while hardening the EL1 bootstrap stack-bank setup, logging the current unisolated bootstrap boundary plan plus the isolated \`drop-to-el0\`/\`el0-svc\` target plan, exposing a transitional same-EL bootstrap kernel-call gate through that context, proving a payload-originated same-EL \`svc\` return in the default QEMU smoke lane, splitting the lower-EL AArch64 sync vector onto a lower-EL \`svc\` handler with a default-smoke dry-run for the future EL0 return path, and keeping direct payload parsing as the compatibility fallback
-- \`kernel/arch/arm64\` now also carries a feature-gated \`bootstrap_kernel_svc_probe\`, \`apps/initd\` carries feature-gated \`bootstrap_svc_probe\` and \`bootstrap_trap_probe\` lanes, and the dedicated QEMU diagnostic runners capture the current same-EL live exception status without weakening the default QEMU smoke baseline
+- \`kernel/arch/arm64\` now also carries feature-gated \`bootstrap_kernel_svc_probe\`, \`bootstrap_pretransfer_svc_probe\`, and \`bootstrap_el0_probe\` lanes, \`apps/initd\` carries feature-gated \`bootstrap_svc_probe\`, \`bootstrap_trap_probe\`, and \`bootstrap_el0_probe\` lanes, and the dedicated QEMU diagnostic runners capture the current same-EL live exception status plus a raw no-MMU EL1-to-EL0 \`eret\` probe that reaches the lower-EL \`svc\` handler and returns to EL0 spin without weakening the default QEMU smoke baseline
 - \`BootInfo v2\` exists as the portable-fabric draft contract, and the loader now plans around v2 seeds internally while the raw live kernel entry accepts an optional v2 sidecar, resolves it into a compact validated bringup summary, and current bringup still derives primary state from v1
 - \`spark-observe\` now emits a persisted structured report with display/storage/network seed paths and a transitional Spark accelerator-seed draft
 - \`novaaa64\` now emits a persisted structured loader handoff report with BootInfo v2 and payload-readiness facts before the live handoff exits boot services
@@ -107,7 +110,7 @@ Open this first when resuming NovaOS from another Codex session.
 ## Current Gaps
 
 - the current raw kernel bringup still derives primary state from \`NovaBootInfoV1\` even though the live handoff now carries an optional \`BootInfo v2\` sidecar that is resolved into a compact validated bringup summary
-- the typed \`init.capsule\` path now enforces a narrow task-bound bootstrap policy, carries a validated bootstrap payload descriptor through \`BootInfo v2\`, and now hands the payload a typed bootstrap context in \`x0\` that also supports a transitional same-EL bootstrap kernel-call round-trip, but the current transfer still runs in-place under the raw-kernel environment rather than as a real isolated \`initd\` task, and the current QEMU lane still only proves \`current_el=1\` with an explicitly logged unisolated \`current-el-svc\` current boundary plan plus a logged isolated \`drop-to-el0\`/\`el0-svc\` target boundary plan. The same-EL exception defect is now cleared in QEMU: the default smoke lane now proves payload-originated \`svc\` return, the lower-EL AArch64 vector path now has the correct ELR-advance handler proven by a kernel-owned dry-run before the future EL0 probe, and the kernel-owned \`svc\`, pre-transfer \`svc\`, payload-originated \`svc\`, and payload-originated \`brk\` diagnostics all return end-to-end, with the kernel-owned \`svc\` scalar caller capture matching \`x0/status\`, \`x1/value0\`, and \`x2/value1\`. Full capability objects, broader endpoint routing, shared-memory policy beyond the first reserved bootstrap region, a real EL0 syscall boundary, and a true isolated \`initd\` task still remain ahead
+- the typed \`init.capsule\` path now enforces a narrow task-bound bootstrap policy, carries a validated bootstrap payload descriptor through \`BootInfo v2\`, and now hands the payload a typed bootstrap context in \`x0\` that also supports a transitional same-EL bootstrap kernel-call round-trip, but the default transfer still runs in-place under the raw-kernel environment rather than as a real isolated \`initd\` task, and the current QEMU lane still only proves \`current_el=1\` with an explicitly logged unisolated \`current-el-svc\` current boundary plan plus a logged isolated \`drop-to-el0\`/\`el0-svc\` target boundary plan. The same-EL exception defect is now cleared in QEMU: the default smoke lane now proves payload-originated \`svc\` return, the lower-EL AArch64 vector path now has the correct ELR-advance handler proven by a kernel-owned dry-run, the feature-gated EL0 diagnostic now proves raw no-MMU \`eret\` to EL0 and lower-EL \`svc\` return to EL0 spin, and the kernel-owned \`svc\`, pre-transfer \`svc\`, payload-originated \`svc\`, and payload-originated \`brk\` diagnostics all return end-to-end, with the kernel-owned \`svc\` scalar caller capture matching \`x0/status\`, \`x1/value0\`, and \`x2/value1\`. Full capability objects, broader endpoint routing, shared-memory policy beyond the first reserved bootstrap region, real user mappings/stacks for the EL0 boundary, and a true isolated \`initd\` task still remain ahead
 - the persisted observatory report still needs real Spark capture and comparison against the QEMU baseline
 - real Spark hardware acceptance is still missing for the observatory, loader, and kernel milestones because the actual operator/root/reboot flow still has to happen on hardware, and the loader milestone still needs both the returned handoff report and stage0 -> stage1 -> kernel evidence from hardware
 - x86_64, PCI, RTX, and Hopper lanes are placeholders only; no second hardware lane boots yet
@@ -124,6 +127,7 @@ Open this first when resuming NovaOS from another Codex session.
 - bootstrap_kernel_svc_caller_capture_matched: ${kernel_svc_caller_capture_matched}
 - bootstrap_kernel_svc_caller_capture_mismatch: ${kernel_svc_caller_capture_mismatch}
 - bootstrap_pretransfer_svc_diagnostic_status: ${pretransfer_svc_diagnostic_status}
+- bootstrap_el0_diagnostic_status: ${el0_diagnostic_status}
 - bootstrap_svc_diagnostic_status: ${svc_diagnostic_status}
 - bootstrap_trap_diagnostic_status: ${trap_diagnostic_status}
 - latest_report: ${report_file}
@@ -131,6 +135,7 @@ Open this first when resuming NovaOS from another Codex session.
 - latest_loop_summary: ${loop_summary_file}
 - latest_bootstrap_kernel_svc_diagnostic_log: ${kernel_svc_diagnostic_log}
 - latest_bootstrap_pretransfer_svc_diagnostic_log: ${pretransfer_svc_diagnostic_log}
+- latest_bootstrap_el0_diagnostic_log: ${el0_diagnostic_log}
 - latest_bootstrap_svc_diagnostic_log: ${svc_diagnostic_log}
 - latest_bootstrap_trap_diagnostic_log: ${trap_diagnostic_log}
 - latest_report_link: ${ROOT_DIR}/artifacts/reports/latest-report.md

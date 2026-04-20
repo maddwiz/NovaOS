@@ -5,15 +5,16 @@
 use core::hint::spin_loop;
 #[cfg(target_os = "none")]
 use core::panic::PanicInfo;
+#[cfg(target_os = "none")]
+use nova_rt::NovaBootstrapTaskContextV1;
+#[cfg(all(target_os = "none", not(feature = "bootstrap_el0_probe")))]
+use nova_rt::bootstrap_trace;
 #[cfg(all(target_os = "none", feature = "bootstrap_trap_probe"))]
 use nova_rt::syscall::bootstrap_trap_trace;
 #[cfg(all(target_os = "none", feature = "bootstrap_svc_probe"))]
 use nova_rt::syscall::trace;
-#[cfg(target_os = "none")]
-use nova_rt::{
-    NovaBootstrapTaskContextV1, NovaSyscallStatusV1, bootstrap_trace,
-    resolve_bootstrap_task_context,
-};
+#[cfg(all(target_os = "none", not(feature = "bootstrap_el0_probe")))]
+use nova_rt::{NovaSyscallStatusV1, resolve_bootstrap_task_context};
 
 #[cfg(all(
     target_os = "none",
@@ -181,12 +182,23 @@ fn panic(_info: &PanicInfo<'_>) -> ! {
 
 #[cfg(target_os = "none")]
 #[unsafe(no_mangle)]
+#[cfg(not(feature = "bootstrap_el0_probe"))]
 pub extern "C" fn _start(context: *const NovaBootstrapTaskContextV1) -> ! {
     trace_initd_entry();
     trace_initd_context_result(context);
-    trace_initd_kernel_call_result(context);
+    maybe_trace_initd_kernel_call_result(context);
     maybe_trace_initd_svc_result(context);
     maybe_trace_initd_trap_result(context);
+    loop {
+        spin_loop();
+    }
+}
+
+#[cfg(target_os = "none")]
+#[unsafe(no_mangle)]
+#[cfg(feature = "bootstrap_el0_probe")]
+pub extern "C" fn _start(context: *const NovaBootstrapTaskContextV1) -> ! {
+    maybe_trace_initd_svc_result(context);
     loop {
         spin_loop();
     }
@@ -201,7 +213,7 @@ pub fn initd_identity() -> &'static str {
     "NovaOS initd payload"
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", not(feature = "bootstrap_el0_probe")))]
 fn trace_initd_context_result(context: *const NovaBootstrapTaskContextV1) {
     if resolve_bootstrap_task_context(context).is_some() {
         trace_initd_context_success();
@@ -210,8 +222,8 @@ fn trace_initd_context_result(context: *const NovaBootstrapTaskContextV1) {
     }
 }
 
-#[cfg(target_os = "none")]
-fn trace_initd_kernel_call_result(context: *const NovaBootstrapTaskContextV1) {
+#[cfg(all(target_os = "none", not(feature = "bootstrap_el0_probe")))]
+fn maybe_trace_initd_kernel_call_result(context: *const NovaBootstrapTaskContextV1) {
     const TRACE_VALUE0: u64 = 0x494E_4954_444B_4341;
     const TRACE_VALUE1: u64 = 0x4E4F_5641_4B45_524E;
 
@@ -231,7 +243,11 @@ fn trace_initd_kernel_call_result(context: *const NovaBootstrapTaskContextV1) {
     }
 }
 
-#[cfg(all(target_os = "none", feature = "bootstrap_trap_probe"))]
+#[cfg(all(
+    target_os = "none",
+    feature = "bootstrap_trap_probe",
+    not(feature = "bootstrap_el0_probe")
+))]
 fn maybe_trace_initd_trap_result(context: *const NovaBootstrapTaskContextV1) {
     const TRACE_VALUE0: u64 = 0x494E_4954_4454_5241;
     const TRACE_VALUE1: u64 = 0x4E4F_5641_5452_4150;
@@ -253,10 +269,18 @@ fn maybe_trace_initd_trap_result(context: *const NovaBootstrapTaskContextV1) {
     }
 }
 
-#[cfg(all(target_os = "none", not(feature = "bootstrap_trap_probe")))]
+#[cfg(all(
+    target_os = "none",
+    not(feature = "bootstrap_trap_probe"),
+    not(feature = "bootstrap_el0_probe")
+))]
 fn maybe_trace_initd_trap_result(_context: *const NovaBootstrapTaskContextV1) {}
 
-#[cfg(all(target_os = "none", feature = "bootstrap_svc_probe"))]
+#[cfg(all(
+    target_os = "none",
+    feature = "bootstrap_svc_probe",
+    not(feature = "bootstrap_el0_probe")
+))]
 fn maybe_trace_initd_svc_result(context: *const NovaBootstrapTaskContextV1) {
     const TRACE_VALUE0: u64 = 0x494E_4954_4453_5643;
     const TRACE_VALUE1: u64 = 0x4E4F_5641_5356_4321;
@@ -276,6 +300,18 @@ fn maybe_trace_initd_svc_result(context: *const NovaBootstrapTaskContextV1) {
     } else {
         trace_initd_svc_failure();
     }
+}
+
+#[cfg(all(
+    target_os = "none",
+    feature = "bootstrap_svc_probe",
+    feature = "bootstrap_el0_probe"
+))]
+fn maybe_trace_initd_svc_result(_context: *const NovaBootstrapTaskContextV1) {
+    const TRACE_VALUE0: u64 = 0x494E_4954_4453_5643;
+    const TRACE_VALUE1: u64 = 0x4E4F_5641_5356_4321;
+
+    let _ = trace(TRACE_VALUE0, TRACE_VALUE1);
 }
 
 #[cfg(all(target_os = "none", not(feature = "bootstrap_svc_probe")))]

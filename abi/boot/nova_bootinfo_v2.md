@@ -34,6 +34,8 @@ Compared with v1, the draft adds:
 
 `bootstrap_user_window` is empty by default. When present, it describes the initial 4 KiB page-aligned EL0 bootstrap user window and stack reservation that the kernel may use to rebase the embedded bootstrap payload instead of treating firmware config-table fields as a user address-space contract. Its `flags` field is reserved and must be zero in the current draft.
 
+The current `novaaa64` loader populates this descriptor only after it has a valid embedded bootstrap-payload descriptor. The descriptor is a portable virtual-address policy, not a Spark/GB10 physical allocation and not proof that EL0 page tables are active.
+
 ## Accelerator seed doctrine
 
 `NovaAccelSeedV1` carries facts only:

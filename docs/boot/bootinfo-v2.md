@@ -20,7 +20,7 @@ Spark remains the first truth platform, but the boot contract can no longer be s
 - `abi/boot/nova_bootinfo_v2.h` is the active draft.
 - the loader now carries an internal/transitional BootInfo v2 sidecar, stage1 validates it, and the raw live kernel entry now resolves and records a compact validated v2 summary from that sidecar while current bringup still derives its primary state from BootInfo v1.
 - that sidecar now also snapshots the embedded bootstrap-task payload image pointer, size, load window, and entry point when `init.capsule` carries a valid wrapped `BOOTSTRAP_TASK_V1` body.
-- the sidecar has an empty-by-default bootstrap user-window descriptor; when later populated with a 4 KiB page-aligned window and zero reserved flags, the kernel page-table planner can prefer it for EL0 image/context/stack placement.
+- the sidecar has an empty-by-default bootstrap user-window descriptor in the ABI, and `novaaa64` now populates it when a valid embedded bootstrap payload exists. This is a portable virtual-address policy for EL0 image/context/stack placement, not a hardware-specific physical allocation or MMU-enable step.
 - no code should deepen the v1 contract without checking whether the field really belongs in the v2 draft instead.
 
 ## Stop-the-world rule

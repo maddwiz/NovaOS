@@ -107,6 +107,7 @@ check_equals "boot_info_valid" "true"
 check_equals "boot_info_v2_valid" "true"
 check_equals "boot_info_v2.present" "true"
 check_equals "boot_info_v2_bootstrap_payload_present" "true"
+check_equals "boot_info_v2_bootstrap_user_window_present" "true"
 check_equals "stage1_plan.present" "true"
 check_equals "stage1_image.present" "true"
 check_equals "kernel_image.present" "true"
@@ -116,6 +117,9 @@ check_nonzero_count "boot_info_v2_storage_seed_count"
 check_present "boot_info_v2_network_seed_count"
 check_nonzero_count "boot_info_v2_accel_seed_count"
 check_nonzero_count "boot_info_v2_bootstrap_payload_size"
+check_present "boot_info_v2_bootstrap_user_window_base"
+check_nonzero_count "boot_info_v2_bootstrap_user_window_size"
+check_nonzero_count "boot_info_v2_bootstrap_user_stack_size"
 check_present "boot_info_v2_platform_class"
 check_present "boot_info_v2_memory_topology"
 
@@ -130,6 +134,10 @@ for key in \
   boot_info_v2_accel_seed_count \
   boot_info_v2_bootstrap_payload_present \
   boot_info_v2_bootstrap_payload_size \
+  boot_info_v2_bootstrap_user_window_present \
+  boot_info_v2_bootstrap_user_window_base \
+  boot_info_v2_bootstrap_user_window_size \
+  boot_info_v2_bootstrap_user_stack_size \
   firmware_revision \
   secure_boot_state \
   boot_source \

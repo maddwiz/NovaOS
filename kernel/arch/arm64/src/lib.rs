@@ -32,8 +32,9 @@ use arch::arm64::exceptions::{
 use arch::arm64::mmu::PageTablePlan;
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]
 use arch::arm64::mmu::{
+    BootstrapEl0BackingFramePopulation, BootstrapEl0BackingFramePopulationReadiness,
     BootstrapEl0MappingRequest, BootstrapEl0PageTableConstruction, BootstrapEl0PageTablePlan,
-    construct_bootstrap_el0_page_tables,
+    construct_bootstrap_el0_page_tables, populate_bootstrap_el0_backing_frames,
 };
 use bootinfo::{
     BootSource, FramebufferFormat, NovaBootInfoV1, NovaBootInfoV2, NovaImageDigestV1,
@@ -937,17 +938,93 @@ fn log_bootstrap_el0_boundary_plan<C: ConsoleSink>(
             backing.page_table_request(page_tables.kernel_base, page_tables.kernel_size),
         );
         console.write_line(page_table_plan.readiness.label());
+        console.write_str("[info] bootstrap el0 backing frames populated ");
+        let population = if page_table_plan.ready() {
+            let population = unsafe { populate_live_bootstrap_el0_backing_frames(page_table_plan) };
+            console.write_line(population.readiness.label());
+            population
+        } else {
+            console.write_line("page-tables-not-ready");
+            BootstrapEl0BackingFramePopulation {
+                readiness: BootstrapEl0BackingFramePopulationReadiness::PageTablePlanNotReady,
+                source_readiness: page_table_plan.readiness,
+                payload_bytes: 0,
+                context_bytes: 0,
+                zeroed_bytes: 0,
+            }
+        };
         console.write_str("[info] bootstrap el0 page tables constructed ");
-        if page_table_plan.ready() {
+        if page_table_plan.ready() && population.ready() {
             let construction = unsafe { construct_live_bootstrap_el0_page_tables(page_table_plan) };
             console.write_line(construction.readiness.label());
         } else {
-            console.write_line("page-tables-not-ready");
+            console.write_line("backing-frames-not-populated");
         }
     } else {
         console.write_line("backing-frames-not-ready");
+        console.write_line("[info] bootstrap el0 backing frames populated page-tables-not-ready");
         console.write_line("[info] bootstrap el0 page tables constructed page-tables-not-ready");
     }
+}
+
+#[cfg(all(target_os = "none", target_arch = "aarch64"))]
+unsafe fn populate_live_bootstrap_el0_backing_frames(
+    plan: BootstrapEl0PageTablePlan,
+) -> BootstrapEl0BackingFramePopulation {
+    let payload_source = unsafe {
+        core::slice::from_raw_parts(
+            plan.payload_copy_source_base as *const u8,
+            plan.payload_copy_source_size as usize,
+        )
+    };
+    let context_source = unsafe {
+        core::slice::from_raw_parts(
+            plan.context_copy_source_base as *const u8,
+            plan.context_copy_source_size as usize,
+        )
+    };
+    let image_frame = unsafe {
+        core::slice::from_raw_parts_mut(
+            plan.user_image_mapping.phys_base as *mut u8,
+            plan.user_image_mapping.size as usize,
+        )
+    };
+    let context_frame = unsafe {
+        core::slice::from_raw_parts_mut(
+            plan.user_context_mapping.phys_base as *mut u8,
+            plan.user_context_mapping.size as usize,
+        )
+    };
+    let stack_frame = unsafe {
+        core::slice::from_raw_parts_mut(
+            plan.user_stack_mapping.phys_base as *mut u8,
+            plan.user_stack_mapping.size as usize,
+        )
+    };
+
+    let population = populate_bootstrap_el0_backing_frames(
+        plan,
+        payload_source,
+        context_source,
+        image_frame,
+        context_frame,
+        stack_frame,
+    );
+    if population.ready() {
+        sync_instruction_cache(
+            plan.user_image_mapping.phys_base as *const u8,
+            plan.user_image_mapping.size as usize,
+        );
+        clean_data_cache(
+            plan.user_context_mapping.phys_base as *const u8,
+            plan.user_context_mapping.size as usize,
+        );
+        clean_data_cache(
+            plan.user_stack_mapping.phys_base as *const u8,
+            plan.user_stack_mapping.size as usize,
+        );
+    }
+    population
 }
 
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]

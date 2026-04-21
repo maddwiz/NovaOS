@@ -114,6 +114,7 @@ pub struct BootstrapEl0MappingPlan {
     pub user_image_size: u64,
     pub user_entry_point: u64,
     pub context_source_base: u64,
+    pub context_source_size: u64,
     pub user_context_base: u64,
     pub user_context_size: u64,
     pub user_stack_base: u64,
@@ -137,6 +138,7 @@ impl BootstrapEl0MappingPlan {
             user_image_size: 0,
             user_entry_point: 0,
             context_source_base: request.context_source_base,
+            context_source_size: request.context_size,
             user_context_base: 0,
             user_context_size: 0,
             user_stack_base: 0,
@@ -404,6 +406,8 @@ pub struct BootstrapEl0PageTablePlan {
     pub source_readiness: BootstrapEl0MappingReadiness,
     pub payload_copy_source_base: u64,
     pub payload_copy_source_size: u64,
+    pub context_copy_source_base: u64,
+    pub context_copy_source_size: u64,
     pub kernel_mapping: Arm64PageMapping,
     pub user_image_mapping: Arm64PageMapping,
     pub user_context_mapping: Arm64PageMapping,
@@ -429,6 +433,8 @@ impl BootstrapEl0PageTablePlan {
             source_readiness: mapping.readiness,
             payload_copy_source_base: mapping.payload_source_base,
             payload_copy_source_size: mapping.payload_source_size,
+            context_copy_source_base: mapping.context_source_base,
+            context_copy_source_size: mapping.context_source_size,
             kernel_mapping: Arm64PageMapping::empty(),
             user_image_mapping: Arm64PageMapping::empty(),
             user_context_mapping: Arm64PageMapping::empty(),
@@ -767,6 +773,166 @@ pub fn construct_bootstrap_el0_page_tables(
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BootstrapEl0BackingFramePopulation {
+    pub readiness: BootstrapEl0BackingFramePopulationReadiness,
+    pub source_readiness: BootstrapEl0PageTableReadiness,
+    pub payload_bytes: u64,
+    pub context_bytes: u64,
+    pub zeroed_bytes: u64,
+}
+
+impl BootstrapEl0BackingFramePopulation {
+    const fn from_plan(
+        plan: BootstrapEl0PageTablePlan,
+        readiness: BootstrapEl0BackingFramePopulationReadiness,
+    ) -> Self {
+        Self {
+            readiness,
+            source_readiness: plan.readiness,
+            payload_bytes: 0,
+            context_bytes: 0,
+            zeroed_bytes: 0,
+        }
+    }
+
+    pub const fn ready(self) -> bool {
+        matches!(
+            self.readiness,
+            BootstrapEl0BackingFramePopulationReadiness::Ready
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BootstrapEl0BackingFramePopulationReadiness {
+    Ready,
+    PageTablePlanNotReady,
+    LengthOverflow,
+    PayloadSourceTooSmall,
+    ContextSourceTooSmall,
+    ImageFrameTooSmall,
+    ContextFrameTooSmall,
+    StackFrameTooSmall,
+}
+
+impl BootstrapEl0BackingFramePopulationReadiness {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::PageTablePlanNotReady => "page-table-plan-not-ready",
+            Self::LengthOverflow => "length-overflow",
+            Self::PayloadSourceTooSmall => "payload-source-too-small",
+            Self::ContextSourceTooSmall => "context-source-too-small",
+            Self::ImageFrameTooSmall => "image-frame-too-small",
+            Self::ContextFrameTooSmall => "context-frame-too-small",
+            Self::StackFrameTooSmall => "stack-frame-too-small",
+        }
+    }
+}
+
+pub fn populate_bootstrap_el0_backing_frames(
+    plan: BootstrapEl0PageTablePlan,
+    payload_source: &[u8],
+    context_source: &[u8],
+    image_frame: &mut [u8],
+    context_frame: &mut [u8],
+    stack_frame: &mut [u8],
+) -> BootstrapEl0BackingFramePopulation {
+    if !plan.ready() {
+        return BootstrapEl0BackingFramePopulation::from_plan(
+            plan,
+            BootstrapEl0BackingFramePopulationReadiness::PageTablePlanNotReady,
+        );
+    }
+
+    let Some(payload_len) = u64_to_usize(plan.payload_copy_source_size) else {
+        return BootstrapEl0BackingFramePopulation::from_plan(
+            plan,
+            BootstrapEl0BackingFramePopulationReadiness::LengthOverflow,
+        );
+    };
+    let Some(context_len) = u64_to_usize(plan.context_copy_source_size) else {
+        return BootstrapEl0BackingFramePopulation::from_plan(
+            plan,
+            BootstrapEl0BackingFramePopulationReadiness::LengthOverflow,
+        );
+    };
+    let Some(image_len) = u64_to_usize(plan.user_image_mapping.size) else {
+        return BootstrapEl0BackingFramePopulation::from_plan(
+            plan,
+            BootstrapEl0BackingFramePopulationReadiness::LengthOverflow,
+        );
+    };
+    let Some(context_frame_len) = u64_to_usize(plan.user_context_mapping.size) else {
+        return BootstrapEl0BackingFramePopulation::from_plan(
+            plan,
+            BootstrapEl0BackingFramePopulationReadiness::LengthOverflow,
+        );
+    };
+    let Some(stack_len) = u64_to_usize(plan.user_stack_mapping.size) else {
+        return BootstrapEl0BackingFramePopulation::from_plan(
+            plan,
+            BootstrapEl0BackingFramePopulationReadiness::LengthOverflow,
+        );
+    };
+
+    if payload_source.len() < payload_len {
+        return BootstrapEl0BackingFramePopulation::from_plan(
+            plan,
+            BootstrapEl0BackingFramePopulationReadiness::PayloadSourceTooSmall,
+        );
+    }
+    if context_source.len() < context_len {
+        return BootstrapEl0BackingFramePopulation::from_plan(
+            plan,
+            BootstrapEl0BackingFramePopulationReadiness::ContextSourceTooSmall,
+        );
+    }
+    if image_frame.len() < image_len || payload_len > image_len {
+        return BootstrapEl0BackingFramePopulation::from_plan(
+            plan,
+            BootstrapEl0BackingFramePopulationReadiness::ImageFrameTooSmall,
+        );
+    }
+    if context_frame.len() < context_frame_len || context_len > context_frame_len {
+        return BootstrapEl0BackingFramePopulation::from_plan(
+            plan,
+            BootstrapEl0BackingFramePopulationReadiness::ContextFrameTooSmall,
+        );
+    }
+    if stack_frame.len() < stack_len {
+        return BootstrapEl0BackingFramePopulation::from_plan(
+            plan,
+            BootstrapEl0BackingFramePopulationReadiness::StackFrameTooSmall,
+        );
+    }
+
+    image_frame[..image_len].fill(0);
+    image_frame[..payload_len].copy_from_slice(&payload_source[..payload_len]);
+    context_frame[..context_frame_len].fill(0);
+    context_frame[..context_len].copy_from_slice(&context_source[..context_len]);
+    stack_frame[..stack_len].fill(0);
+
+    let mut population = BootstrapEl0BackingFramePopulation::from_plan(
+        plan,
+        BootstrapEl0BackingFramePopulationReadiness::Ready,
+    );
+    population.payload_bytes = plan.payload_copy_source_size;
+    population.context_bytes = plan.context_copy_source_size;
+    population.zeroed_bytes = plan
+        .user_image_mapping
+        .size
+        .saturating_sub(plan.payload_copy_source_size)
+        .saturating_add(
+            plan.user_context_mapping
+                .size
+                .saturating_sub(plan.context_copy_source_size),
+        )
+        .saturating_add(plan.user_stack_mapping.size);
+    population
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct BootstrapEl0TranslationTableLayout {
     l0_index: usize,
     kernel_l1_index: usize,
@@ -1016,17 +1182,26 @@ fn mapping_end(mapping: Arm64PageMapping) -> Option<u64> {
     mapping.virt_base.checked_add(mapping.size)
 }
 
+const fn u64_to_usize(value: u64) -> Option<usize> {
+    if value > usize::MAX as u64 {
+        None
+    } else {
+        Some(value as usize)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         Arm64AccessPerm, Arm64MemoryAttr, BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES,
-        BOOTSTRAP_EL0_TRANSLATION_TABLE_ENTRIES, BootstrapEl0MappingReadiness,
-        BootstrapEl0MappingRequest, BootstrapEl0PageTableConstructionReadiness,
-        BootstrapEl0PageTableReadiness, BootstrapEl0PageTableRequest, DESCRIPTOR_NG,
-        DESCRIPTOR_PXN, DESCRIPTOR_UXN, KERNEL_L2_TABLE_INDEX, L1_TABLE_INDEX, PAGE_SIZE,
-        PageTablePlan, ROOT_TABLE_INDEX, USER_L2_TABLE_INDEX, USER_L3_TABLE_INDEX,
-        construct_bootstrap_el0_page_tables, l0_index, l1_index, l2_index, l3_index,
-        page_descriptor, table_descriptor, table_entry_offset,
+        BOOTSTRAP_EL0_TRANSLATION_TABLE_ENTRIES, BootstrapEl0BackingFramePopulationReadiness,
+        BootstrapEl0MappingReadiness, BootstrapEl0MappingRequest,
+        BootstrapEl0PageTableConstructionReadiness, BootstrapEl0PageTableReadiness,
+        BootstrapEl0PageTableRequest, DESCRIPTOR_NG, DESCRIPTOR_PXN, DESCRIPTOR_UXN,
+        KERNEL_L2_TABLE_INDEX, L1_TABLE_INDEX, PAGE_SIZE, PageTablePlan, ROOT_TABLE_INDEX,
+        USER_L2_TABLE_INDEX, USER_L3_TABLE_INDEX, construct_bootstrap_el0_page_tables, l0_index,
+        l1_index, l2_index, l3_index, page_descriptor, populate_bootstrap_el0_backing_frames,
+        table_descriptor, table_entry_offset,
     };
     use crate::bootinfo::{NovaBootInfoV1, NovaBootInfoV2, NovaBootstrapUserWindowDescriptorV1};
 
@@ -1097,6 +1272,8 @@ mod tests {
         assert_eq!(plan.user_image_base, 0x4000_0000);
         assert_eq!(plan.user_image_size, PAGE_SIZE * 2);
         assert_eq!(plan.user_entry_point, 0x4000_0008);
+        assert_eq!(plan.context_source_base, 0x8100_0000);
+        assert_eq!(plan.context_source_size, 96);
         assert_eq!(plan.user_context_base, 0x4000_2000);
         assert_eq!(plan.user_context_size, PAGE_SIZE);
         assert_eq!(plan.user_stack_base, 0x4001_8000);
@@ -1195,6 +1372,8 @@ mod tests {
         assert_eq!(plan.source_readiness, BootstrapEl0MappingReadiness::Ready);
         assert_eq!(plan.payload_copy_source_base, 0x8020_0098);
         assert_eq!(plan.payload_copy_source_size, 0x1234);
+        assert_eq!(plan.context_copy_source_base, 0x8100_0000);
+        assert_eq!(plan.context_copy_source_size, 96);
         assert_ne!(
             plan.user_image_mapping.phys_base,
             mapping.payload_source_map_base
@@ -1366,6 +1545,66 @@ mod tests {
         assert_eq!(
             construction.source_readiness,
             BootstrapEl0PageTableReadiness::Ready
+        );
+    }
+
+    #[test]
+    fn bootstrap_el0_backing_frame_population_copies_payload_context_and_zeros_padding() {
+        let plan = ready_bootstrap_el0_page_table_plan();
+        let payload_source = [0x5a; 0x1234];
+        let context_source = [0xc3; 96];
+        let mut image_frame = [0xaa; 0x2000];
+        let mut context_frame = [0xbb; 0x1000];
+        let mut stack_frame = [0xcc; 0x8000];
+
+        let population = populate_bootstrap_el0_backing_frames(
+            plan,
+            &payload_source,
+            &context_source,
+            &mut image_frame,
+            &mut context_frame,
+            &mut stack_frame,
+        );
+
+        assert!(population.ready());
+        assert_eq!(
+            population.readiness,
+            BootstrapEl0BackingFramePopulationReadiness::Ready
+        );
+        assert_eq!(population.payload_bytes, 0x1234);
+        assert_eq!(population.context_bytes, 96);
+        assert_eq!(
+            population.zeroed_bytes,
+            0x8000 + 0x2000 - 0x1234 + 0x1000 - 96
+        );
+        assert_eq!(&image_frame[..0x1234], &payload_source);
+        assert!(image_frame[0x1234..].iter().all(|byte| *byte == 0));
+        assert_eq!(&context_frame[..96], &context_source);
+        assert!(context_frame[96..].iter().all(|byte| *byte == 0));
+        assert!(stack_frame.iter().all(|byte| *byte == 0));
+    }
+
+    #[test]
+    fn bootstrap_el0_backing_frame_population_rejects_short_payload_source() {
+        let plan = ready_bootstrap_el0_page_table_plan();
+        let payload_source = [0x5a; 0x1233];
+        let context_source = [0xc3; 96];
+        let mut image_frame = [0xaa; 0x2000];
+        let mut context_frame = [0xbb; 0x1000];
+        let mut stack_frame = [0xcc; 0x8000];
+
+        let population = populate_bootstrap_el0_backing_frames(
+            plan,
+            &payload_source,
+            &context_source,
+            &mut image_frame,
+            &mut context_frame,
+            &mut stack_frame,
+        );
+
+        assert_eq!(
+            population.readiness,
+            BootstrapEl0BackingFramePopulationReadiness::PayloadSourceTooSmall
         );
     }
 

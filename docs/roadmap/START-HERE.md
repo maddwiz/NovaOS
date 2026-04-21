@@ -6,11 +6,11 @@ NovaOS is now a portable fabric OS with Spark as the first truth platform. Keep 
 
 ## Read Order
 
-1. [live-status.md](/home/nova/NovaOS/docs/roadmap/live-status.md)
-2. [master-roadmap-checklist.md](/home/nova/NovaOS/docs/roadmap/master-roadmap-checklist.md)
-3. [portable-fabric.md](/home/nova/NovaOS/docs/architecture/portable-fabric.md)
-4. [m1-progress-2026-03-30.md](/home/nova/NovaOS/docs/roadmap/m1-progress-2026-03-30.md)
-5. [latest-report.md](/home/nova/NovaOS/artifacts/reports/latest-report.md)
+1. [live-status.md](live-status.md)
+2. [master-roadmap-checklist.md](master-roadmap-checklist.md)
+3. [portable-fabric.md](../architecture/portable-fabric.md)
+4. [m1-progress-2026-03-30.md](m1-progress-2026-03-30.md)
+5. `artifacts/reports/latest-report.md` when generated locally
 
 ## Minimum Resume Steps
 
@@ -26,3 +26,4 @@ NovaOS is now a portable fabric OS with Spark as the first truth platform. Keep 
 - service: `novaos-validation.service`
 - status command: `systemctl --user status novaos-validation.service --no-pager`
 - log command: `journalctl --user -u novaos-validation.service -n 60 --no-pager`
+- reports: local runtime outputs under `artifacts/reports/`; run `make report` if they are absent in a fresh clone

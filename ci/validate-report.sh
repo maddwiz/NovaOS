@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${ROOT_DIR:-/home/nova/NovaOS}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${ROOT_DIR:-$(cd -- "${SCRIPT_DIR}/.." && pwd)}"
 REPORT_DIR="${REPORT_DIR:-${ROOT_DIR}/artifacts/reports}"
 
 latest_report="$(ls -1t "${REPORT_DIR}"/novaos-report-*.md 2>/dev/null | head -n 1 || true)"

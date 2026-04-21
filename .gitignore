@@ -9,6 +9,7 @@
 /artifacts/reports/*.md
 /artifacts/reports/*.summary
 !/artifacts/reports/.gitkeep
+!/artifacts/reports/README.md
 .DS_Store
 *.swp
 *.swo

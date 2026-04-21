@@ -3,14 +3,16 @@ Description=NovaOS continuous validation loop
 After=default.target
 StartLimitIntervalSec=0
 
+# Rendered by scripts/install-novaos-user-service.sh.
+
 [Service]
 Type=simple
-WorkingDirectory=/home/nova/NovaOS
-Environment=ROOT_DIR=/home/nova/NovaOS
+WorkingDirectory=__NOVAOS_ROOT_DIR__
+Environment=ROOT_DIR=__NOVAOS_ROOT_DIR__
 Environment=PATH=/home/linuxbrew/.linuxbrew/bin:/home/nova/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=RUN_ONCE=0
 Environment=SLEEP_SECONDS=300
-ExecStart=/home/nova/NovaOS/scripts/novaos-ci-loop.sh
+ExecStart=__NOVAOS_ROOT_DIR__/scripts/novaos-ci-loop.sh
 Restart=always
 RestartSec=15
 

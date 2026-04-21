@@ -1,4 +1,5 @@
-ROOT_DIR ?= /home/nova/NovaOS
+ROOT_DIR ?= $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+ROOT_DIR := $(patsubst %/,%,$(ROOT_DIR))
 
 .PHONY: check env report loop build-efi build-kernel qemu-observe qemu-stage0 install-service service-status
 

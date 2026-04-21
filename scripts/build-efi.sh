@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${ROOT_DIR:-/home/nova/NovaOS}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${ROOT_DIR:-$(cd -- "${SCRIPT_DIR}/.." && pwd)}"
 TARGET="${TARGET:-aarch64-unknown-uefi}"
 PROFILE="${PROFILE:-dev}"
 NOVAAA64_FEATURES="${NOVAAA64_FEATURES:-}"

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${ROOT_DIR:-/home/nova/NovaOS}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${ROOT_DIR:-$(cd -- "${SCRIPT_DIR}/.." && pwd)}"
 export PATH="/home/linuxbrew/.linuxbrew/bin:/home/nova/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 
 have() {
@@ -9,10 +10,11 @@ have() {
 }
 
 has_rust_target() {
+  local target="$1"
   rustup_home="${RUSTUP_HOME:-${HOME}/.rustup}"
   toolchain_dir="${rustup_home}/toolchains"
   [ -d "${toolchain_dir}" ] || return 1
-  find "${toolchain_dir}" -path '*/lib/rustlib/aarch64-unknown-uefi' -type d 2>/dev/null | grep -q .
+  find "${toolchain_dir}" -path "*/lib/rustlib/${target}" -type d 2>/dev/null | grep -q .
 }
 
 report_line() {
@@ -32,12 +34,18 @@ else
 fi
 
 if have rustup; then
-  if has_rust_target; then
-    report_line "rust_target=aarch64-unknown-uefi present"
-  else
-    report_line "rust_target=aarch64-unknown-uefi missing"
-    status=1
-  fi
+  for target in \
+    aarch64-unknown-none-softfloat \
+    aarch64-unknown-uefi \
+    x86_64-unknown-none
+  do
+    if has_rust_target "${target}"; then
+      report_line "rust_target=${target} present"
+    else
+      report_line "rust_target=${target} missing"
+      status=1
+    fi
+  done
 else
   report_line "rustup=missing"
   status=1

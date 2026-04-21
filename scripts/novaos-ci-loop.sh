@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${ROOT_DIR:-/home/nova/NovaOS}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${ROOT_DIR:-$(cd -- "${SCRIPT_DIR}/.." && pwd)}"
 ITERATIONS="${ITERATIONS:-0}"
 SLEEP_SECONDS="${SLEEP_SECONDS:-300}"
 RUN_ONCE="${RUN_ONCE:-0}"

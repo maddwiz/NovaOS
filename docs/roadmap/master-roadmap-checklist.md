@@ -1,6 +1,6 @@
 # NovaOS Master Roadmap Checklist
 
-This is the durable handoff document for NovaOS. Another Codex session should read this file, then `artifacts/reports/latest-status.txt`, then `artifacts/reports/latest-loop-status.txt` before changing code.
+This is the durable handoff document for NovaOS. Another Codex session should read this file, then the locally generated `artifacts/reports/latest-status.txt` and `artifacts/reports/latest-loop-status.txt` when present, before changing code.
 
 ## Scope
 
@@ -54,9 +54,9 @@ Before deeper platform-specific kernel work continues, keep these items true:
 
 ## Resume Order
 
-1. Read `artifacts/reports/latest-status.txt`.
-2. Read `artifacts/reports/latest-loop-status.txt`.
-3. Read `artifacts/reports/latest-report.md`.
+1. Read `artifacts/reports/latest-status.txt` when present, or run `make report` first in a fresh clone.
+2. Read `artifacts/reports/latest-loop-status.txt` when present.
+3. Read `artifacts/reports/latest-report.md` when present.
 4. Read `docs/roadmap/live-status.md`.
 5. Continue from the first unchecked item below.
 

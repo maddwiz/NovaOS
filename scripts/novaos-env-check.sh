@@ -108,6 +108,13 @@ else
   status=1
 fi
 
+if have ld.lld; then
+  report_line "ld.lld=present"
+else
+  report_line "ld.lld=missing"
+  status=1
+fi
+
 if have sbsign; then
   report_line "sbsign=present"
 else

@@ -28,9 +28,9 @@ use nova_rt::{
     NovaVerificationInfoV1, PayloadImage,
 };
 use nova_rt::{
-    NovaBootInfoV1, NovaBootInfoV2, NovaBootstrapPayloadDescriptorV1,
-    NovaBootstrapUserWindowDescriptorV1, NovaDisplayPathDescriptorV1, NovaNetworkSeedV1,
-    NovaStorageSeedV1,
+    NovaBootInfoV1, NovaBootInfoV2, NovaBootstrapFrameArenaDescriptorV1,
+    NovaBootstrapPayloadDescriptorV1, NovaBootstrapUserWindowDescriptorV1,
+    NovaDisplayPathDescriptorV1, NovaNetworkSeedV1, NovaStorageSeedV1,
 };
 use novaos_stage1::Stage1Status;
 #[cfg(target_os = "uefi")]
@@ -115,6 +115,7 @@ struct BootInfoV2SeedLayout {
     accel_seed_count: u32,
     bootstrap_payload: NovaBootstrapPayloadDescriptorV1,
     bootstrap_user_window: NovaBootstrapUserWindowDescriptorV1,
+    bootstrap_frame_arena: NovaBootstrapFrameArenaDescriptorV1,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -133,6 +134,7 @@ pub struct LoaderPlan {
     pub storage_seeds_v2: Option<PayloadRegion>,
     pub network_seeds_v2: Option<PayloadRegion>,
     pub accel_seed_v2: Option<PayloadRegion>,
+    pub bootstrap_frame_arena_v2: Option<PayloadRegion>,
     pub kernel_image_digest: Option<PayloadRegion>,
     pub verification_info: Option<PayloadRegion>,
     pub memory_map: Option<PayloadRegion>,
@@ -153,6 +155,7 @@ impl LoaderPlan {
             storage_seeds_v2: None,
             network_seeds_v2: None,
             accel_seed_v2: None,
+            bootstrap_frame_arena_v2: None,
             kernel_image_digest: None,
             verification_info: None,
             memory_map: None,
@@ -271,6 +274,11 @@ impl LoaderPlan {
                 describe_region(f, "storage_seeds_v2", self.0.storage_seeds_v2)?;
                 describe_region(f, "network_seeds_v2", self.0.network_seeds_v2)?;
                 describe_region(f, "accel_seed_v2", self.0.accel_seed_v2)?;
+                describe_region(
+                    f,
+                    "bootstrap_frame_arena_v2",
+                    self.0.bootstrap_frame_arena_v2,
+                )?;
                 describe_region(f, "kernel_image_digest", self.0.kernel_image_digest)?;
                 describe_region(f, "verification_info", self.0.verification_info)?;
                 describe_region(f, "memory_map", self.0.memory_map)?;
@@ -371,6 +379,21 @@ impl LoaderPlan {
         );
         let _ = writeln!(
             report,
+            "boot_info_v2_bootstrap_frame_arena_present={}",
+            !self.boot_info_v2_draft.bootstrap_frame_arena.is_empty()
+        );
+        let _ = writeln!(
+            report,
+            "boot_info_v2_bootstrap_frame_arena_base={:#x}",
+            self.boot_info_v2_draft.bootstrap_frame_arena.base
+        );
+        let _ = writeln!(
+            report,
+            "boot_info_v2_bootstrap_frame_arena_size={}",
+            self.boot_info_v2_draft.bootstrap_frame_arena.len
+        );
+        let _ = writeln!(
+            report,
             "firmware_revision={}",
             self.boot_info.firmware_revision
         );
@@ -430,6 +453,11 @@ impl LoaderPlan {
         emit_report_region(&mut report, "storage_seeds_v2", self.storage_seeds_v2);
         emit_report_region(&mut report, "network_seeds_v2", self.network_seeds_v2);
         emit_report_region(&mut report, "accel_seed_v2", self.accel_seed_v2);
+        emit_report_region(
+            &mut report,
+            "bootstrap_frame_arena_v2",
+            self.bootstrap_frame_arena_v2,
+        );
         emit_report_region(&mut report, "kernel_image_digest", self.kernel_image_digest);
         emit_report_region(&mut report, "verification_info", self.verification_info);
         emit_report_region(&mut report, "memory_map", self.memory_map);
@@ -545,6 +573,7 @@ impl LoaderHandoff {
             storage_seeds_v2: None,
             network_seeds_v2: None,
             accel_seed_v2: None,
+            bootstrap_frame_arena_v2: None,
             kernel_image_digest: None,
             verification_info: None,
             memory_map: None,
@@ -630,6 +659,17 @@ impl LoaderHandoff {
         );
         boot_info_v2_seeds.bootstrap_user_window =
             build_bootstrap_user_window_descriptor(boot_info_v2_seeds.bootstrap_payload);
+        if !boot_info_v2_seeds.bootstrap_user_window.is_empty() {
+            if let Some(arena) = PersistentBytes::zeroed(
+                boot_info_v2_seeds.bootstrap_user_window.len as usize,
+                MemoryType::LOADER_DATA,
+            ) {
+                boot_info_v2_seeds.bootstrap_frame_arena =
+                    build_bootstrap_frame_arena_descriptor(arena.as_ptr() as u64, arena.len());
+                plan.bootstrap_frame_arena_v2 = Some(arena.region("bootinfo_v2.bootstrap_frames"));
+                buffers.bootstrap_frame_arena_v2 = Some(arena);
+            }
+        }
 
         if let Some(accel_seed_v2) = PersistentObject::new(build_accel_seed_v2()) {
             plan.accel_seed_v2 = Some(accel_seed_v2.region("bootinfo_v2.accel_seed"));
@@ -827,6 +867,11 @@ impl LoaderHandoff {
                 .init_capsule
                 .as_ref()
                 .map(PersistentBytes::as_slice);
+            let bootstrap_frame_arena = self
+                .buffers
+                .bootstrap_frame_arena_v2
+                .as_ref()
+                .map(PersistentBytes::as_slice);
             if !validate_boot_info_v2(
                 boot_info_v2.as_ref(),
                 display_path,
@@ -834,6 +879,7 @@ impl LoaderHandoff {
                 network_seeds,
                 accel_seed,
                 init_capsule,
+                bootstrap_frame_arena,
             ) {
                 return Err(LoaderError::InvalidBootInfoV2);
             }
@@ -1026,6 +1072,7 @@ struct LoaderBuffers {
     network_seed_texts_v2: Vec<PersistentBytes>,
     network_seeds_v2: Option<PersistentSlice<NovaNetworkSeedV1>>,
     accel_seed_v2: Option<PersistentObject<AccelSeedV1>>,
+    bootstrap_frame_arena_v2: Option<PersistentBytes>,
     kernel_image_digest: Option<PersistentObject<NovaImageDigestV1>>,
     verification_info: Option<PersistentObject<NovaVerificationInfoV1>>,
     memory_map: Option<PersistentBytes>,
@@ -1048,6 +1095,7 @@ impl LoaderBuffers {
             network_seed_texts_v2: Vec::new(),
             network_seeds_v2: None,
             accel_seed_v2: None,
+            bootstrap_frame_arena_v2: None,
             kernel_image_digest: None,
             verification_info: None,
             memory_map: None,
@@ -1098,6 +1146,9 @@ impl LoaderBuffers {
                 accel_seed.as_ptr() as *const u8,
                 core::mem::size_of::<AccelSeedV1>(),
             );
+        }
+        if let Some(arena) = self.bootstrap_frame_arena_v2.as_ref() {
+            clean_data_cache(arena.as_ptr(), arena.len());
         }
         if let Some(kernel_image_digest) = self.kernel_image_digest.as_ref() {
             clean_data_cache(
@@ -1351,7 +1402,7 @@ fn load_payload(
 #[cfg(target_os = "uefi")]
 fn build_loader_log(plan: &LoaderPlan) -> String {
     format!(
-        "NovaOS stage0 log\nflags={:#x}\nconfig_tables={}\nmemory_map_entries={}\nbootinfo_v2_valid={}\nbootinfo_v2_platform_class={}\nbootinfo_v2_memory_topology={}\nbootinfo_v2_display_path={}\nbootinfo_v2_storage_seeds={}\nbootinfo_v2_network_seeds={}\nbootinfo_v2_accel_seeds={}\nbootinfo_v2_bootstrap_payload={}\nbootinfo_v2_bootstrap_payload_size={}\nbootinfo_v2_bootstrap_user_window={}\nbootinfo_v2_bootstrap_user_window_base={:#x}\nbootinfo_v2_bootstrap_user_window_size={}\nbootinfo_v2_bootstrap_user_stack_size={}\nkernel_image_digest={}\nverification_info={}\nmemory_map_storage={}\nstage1_plan_storage={}\nstage1={}\nkernel={}\ninit_capsule={}\n",
+        "NovaOS stage0 log\nflags={:#x}\nconfig_tables={}\nmemory_map_entries={}\nbootinfo_v2_valid={}\nbootinfo_v2_platform_class={}\nbootinfo_v2_memory_topology={}\nbootinfo_v2_display_path={}\nbootinfo_v2_storage_seeds={}\nbootinfo_v2_network_seeds={}\nbootinfo_v2_accel_seeds={}\nbootinfo_v2_bootstrap_payload={}\nbootinfo_v2_bootstrap_payload_size={}\nbootinfo_v2_bootstrap_user_window={}\nbootinfo_v2_bootstrap_user_window_base={:#x}\nbootinfo_v2_bootstrap_user_window_size={}\nbootinfo_v2_bootstrap_user_stack_size={}\nbootinfo_v2_bootstrap_frame_arena={}\nbootinfo_v2_bootstrap_frame_arena_base={:#x}\nbootinfo_v2_bootstrap_frame_arena_size={}\nkernel_image_digest={}\nverification_info={}\nmemory_map_storage={}\nstage1_plan_storage={}\nstage1={}\nkernel={}\ninit_capsule={}\n",
         plan.boot_info.flags,
         plan.boot_info.config_table_count,
         plan.boot_info.memory_map_entries,
@@ -1368,6 +1419,9 @@ fn build_loader_log(plan: &LoaderPlan) -> String {
         plan.boot_info_v2_draft.bootstrap_user_window.base,
         plan.boot_info_v2_draft.bootstrap_user_window.len,
         plan.boot_info_v2_draft.bootstrap_user_window.stack_size,
+        !plan.boot_info_v2_draft.bootstrap_frame_arena.is_empty(),
+        plan.boot_info_v2_draft.bootstrap_frame_arena.base,
+        plan.boot_info_v2_draft.bootstrap_frame_arena.len,
         plan.kernel_image_digest.is_some(),
         plan.verification_info.is_some(),
         plan.memory_map.is_some(),
@@ -1692,6 +1746,24 @@ fn align_up_bootstrap_user_window(value: u64) -> Option<u64> {
     value.checked_add(page_mask).map(|value| value & !page_mask)
 }
 
+fn build_bootstrap_frame_arena_descriptor(
+    base: u64,
+    len: usize,
+) -> NovaBootstrapFrameArenaDescriptorV1 {
+    let len = len as u64;
+    let descriptor = NovaBootstrapFrameArenaDescriptorV1 {
+        base,
+        len,
+        page_size: NovaBootstrapFrameArenaDescriptorV1::PAGE_SIZE_4K,
+        flags: 0,
+    };
+    if descriptor.is_valid() {
+        descriptor
+    } else {
+        NovaBootstrapFrameArenaDescriptorV1::empty()
+    }
+}
+
 fn build_boot_info_v2_draft(plan: &LoaderPlan, seeds: &BootInfoV2SeedLayout) -> NovaBootInfoV2 {
     let mut info = NovaBootInfoV2::new();
     info.cpu_arch = CpuArchitecture::Arm64;
@@ -1737,6 +1809,7 @@ fn build_boot_info_v2_draft(plan: &LoaderPlan, seeds: &BootInfoV2SeedLayout) -> 
     } else {
         seeds.bootstrap_user_window
     };
+    info.bootstrap_frame_arena = seeds.bootstrap_frame_arena;
     info
 }
 
@@ -1747,6 +1820,7 @@ fn validate_boot_info_v2(
     network_seeds: Option<&[NovaNetworkSeedV1]>,
     accel_seed: Option<&AccelSeedV1>,
     init_capsule: Option<&[u8]>,
+    bootstrap_frame_arena: Option<&[u8]>,
 ) -> bool {
     if !info.is_valid() {
         return false;
@@ -1789,7 +1863,27 @@ fn validate_boot_info_v2(
             && accel_seed.platform_ready()
     };
 
-    accel_valid && validate_bootstrap_payload_descriptor(&info.bootstrap_payload, init_capsule)
+    accel_valid
+        && validate_bootstrap_payload_descriptor(&info.bootstrap_payload, init_capsule)
+        && validate_bootstrap_frame_arena_descriptor(
+            &info.bootstrap_frame_arena,
+            bootstrap_frame_arena,
+        )
+}
+
+fn validate_bootstrap_frame_arena_descriptor(
+    descriptor: &NovaBootstrapFrameArenaDescriptorV1,
+    arena: Option<&[u8]>,
+) -> bool {
+    if !descriptor.is_valid() {
+        return false;
+    }
+
+    let Some(arena) = arena else {
+        return descriptor.is_empty();
+    };
+
+    descriptor.base == arena.as_ptr() as u64 && descriptor.len == arena.len() as u64
 }
 
 fn validate_bootstrap_payload_descriptor(
@@ -1889,8 +1983,9 @@ fn memory_map_reserve_len(map_size: usize, desc_size: usize) -> usize {
 mod loader_tests {
     use super::{
         BootInfoV2SeedLayout, LoaderPlan, PayloadRegion, build_accel_seed_v2,
-        build_boot_info_v2_draft, build_bootstrap_payload_descriptor,
-        build_bootstrap_user_window_descriptor, memory_map_reserve_len, validate_boot_info_v2,
+        build_boot_info_v2_draft, build_bootstrap_frame_arena_descriptor,
+        build_bootstrap_payload_descriptor, build_bootstrap_user_window_descriptor,
+        memory_map_reserve_len, validate_boot_info_v2,
     };
     use nova_fabric::{AccelTransport, CpuArchitecture, MemoryTopologyClass, PlatformClass};
     use nova_rt::{
@@ -2023,6 +2118,20 @@ mod loader_tests {
     }
 
     #[test]
+    fn bootstrap_frame_arena_descriptor_tracks_reserved_loader_pages() {
+        let descriptor = build_bootstrap_frame_arena_descriptor(0x9000_0000, 0x20_000);
+
+        assert!(descriptor.is_valid());
+        assert!(!descriptor.is_empty());
+        assert_eq!(descriptor.base, 0x9000_0000);
+        assert_eq!(descriptor.len, 0x20_000);
+        assert_eq!(descriptor.page_size, 4096);
+        assert_eq!(descriptor.flags, 0);
+
+        assert!(build_bootstrap_frame_arena_descriptor(0x9000_0001, 0x20_000).is_empty());
+    }
+
+    #[test]
     fn validate_boot_info_v2_requires_matching_platform_ready_seed() {
         let seed = build_accel_seed_v2();
         let display_path = b"PciRoot(0x0)/Pci(0x1,0x0)";
@@ -2062,6 +2171,7 @@ mod loader_tests {
             Some(&network_seeds),
             Some(&seed),
             Some(init_capsule.as_slice()),
+            None,
         ));
 
         info.accel_seeds_ptr = 0;
@@ -2072,6 +2182,7 @@ mod loader_tests {
             Some(&network_seeds),
             Some(&seed),
             Some(init_capsule.as_slice()),
+            None,
         ));
     }
 
@@ -2086,7 +2197,9 @@ mod loader_tests {
             },
         );
 
-        assert!(!validate_boot_info_v2(&info, None, None, None, None, None));
+        assert!(!validate_boot_info_v2(
+            &info, None, None, None, None, None, None
+        ));
     }
 
     #[test]
@@ -2111,6 +2224,7 @@ mod loader_tests {
             None,
             None,
             Some(&seed),
+            None,
             None,
         ));
     }
@@ -2139,6 +2253,7 @@ mod loader_tests {
             None,
             Some(&seed),
             Some(init_capsule.as_slice()),
+            None,
         ));
     }
 
@@ -2172,8 +2287,17 @@ mod loader_tests {
                 bootstrap_user_window: build_bootstrap_user_window_descriptor(
                     build_bootstrap_payload_descriptor(Some(init_capsule.as_slice())),
                 ),
+                bootstrap_frame_arena: build_bootstrap_frame_arena_descriptor(
+                    0x9000_0000,
+                    0x20_000,
+                ),
             },
         );
+        plan.bootstrap_frame_arena_v2 = Some(PayloadRegion {
+            path: "bootinfo_v2.bootstrap_frames",
+            base: 0x9000_0000,
+            len: 0x20_000,
+        });
         plan.boot_info_v2 = Some(PayloadRegion {
             path: "bootinfo_v2",
             base: 0x7100,
@@ -2204,6 +2328,10 @@ mod loader_tests {
         assert!(report.contains("boot_info_v2_bootstrap_user_window_base=0x40000000"));
         assert!(report.contains("boot_info_v2_bootstrap_user_window_size=131072"));
         assert!(report.contains("boot_info_v2_bootstrap_user_stack_size=32768"));
+        assert!(report.contains("boot_info_v2_bootstrap_frame_arena_present=true"));
+        assert!(report.contains("boot_info_v2_bootstrap_frame_arena_base=0x90000000"));
+        assert!(report.contains("boot_info_v2_bootstrap_frame_arena_size=131072"));
+        assert!(report.contains("bootstrap_frame_arena_v2.present=true"));
         assert!(report.contains("framebuffer_present=true"));
         assert!(report.contains("boot_info_v2.present=true"));
         assert!(report.contains("stage1_image.present=true"));

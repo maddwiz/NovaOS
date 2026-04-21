@@ -16,7 +16,7 @@ mkdir -p "${REPORT_DIR}"
 
 set +e
 EFI_BINARY=novaaa64 \
-EXPECT_TEXTS="NovaOS stage0 loader;NovaOS stage1 entered;NovaOS stage1 bootinfo_v2 sidecar;NovaOS kernel entered;NovaOS kernel bring-up;init capsule summary observed;bootstrap task current initd;bootstrap task launch plan from bootinfo_v2;bootstrap el0 mapping ready;bootstrap task boundary same-el;bootstrap task target boundary drop-to-el0;bootstrap task transfer initd;bootstrap lower-el svc from initd;NovaOS bootstrap vector return" \
+EXPECT_TEXTS="NovaOS stage0 loader;NovaOS stage1 entered;NovaOS stage1 bootinfo_v2 sidecar;NovaOS kernel entered;NovaOS kernel bring-up;init capsule summary observed;bootstrap task current initd;bootstrap task launch plan from bootinfo_v2;bootstrap el0 mapping ready;bootstrap el0 backing frames ready;bootstrap el0 page tables ready;bootstrap task boundary same-el;bootstrap task target boundary drop-to-el0;bootstrap task transfer initd;bootstrap lower-el svc from initd;NovaOS bootstrap vector return" \
 STAGE_NOVA_PAYLOADS=1 \
 PAYLOAD_FEATURES=qemu_virt_trace,bootstrap_trap_vector_trace,bootstrap_el0_probe \
 INITD_FEATURES=qemu_virt_trace,bootstrap_svc_probe,bootstrap_el0_probe \

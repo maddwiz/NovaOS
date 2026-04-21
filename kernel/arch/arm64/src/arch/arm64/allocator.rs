@@ -1,4 +1,4 @@
-use crate::bootinfo::NovaBootInfoV1;
+use crate::bootinfo::{NovaBootInfoV1, NovaBootInfoV2};
 
 use super::mmu::{
     BootstrapEl0MappingPlan, BootstrapEl0MappingReadiness, BootstrapEl0PageTableRequest, PAGE_SIZE,
@@ -9,6 +9,8 @@ pub struct FrameAllocatorPlan {
     pub usable_base: u64,
     pub usable_limit: u64,
     pub reserved_bytes: u64,
+    pub bootstrap_el0_arena_base: u64,
+    pub bootstrap_el0_arena_size: u64,
 }
 
 impl FrameAllocatorPlan {
@@ -17,6 +19,8 @@ impl FrameAllocatorPlan {
             usable_base: 0,
             usable_limit: 0,
             reserved_bytes: 0,
+            bootstrap_el0_arena_base: 0,
+            bootstrap_el0_arena_size: 0,
         }
     }
 
@@ -26,7 +30,31 @@ impl FrameAllocatorPlan {
             usable_base: memory.usable_base,
             usable_limit: memory.usable_limit,
             reserved_bytes: memory.reserved_bytes,
+            bootstrap_el0_arena_base: 0,
+            bootstrap_el0_arena_size: 0,
         }
+    }
+
+    pub fn from_boot_info_with_v2(
+        boot_info: &NovaBootInfoV1,
+        boot_info_v2: Option<&NovaBootInfoV2>,
+    ) -> Self {
+        let mut plan = Self::from_boot_info(boot_info);
+        if let Some(arena) = boot_info_v2
+            .map(|boot_info_v2| boot_info_v2.bootstrap_frame_arena)
+            .filter(|arena| !arena.is_empty() && arena.is_valid())
+        {
+            plan.bootstrap_el0_arena_base = arena.base;
+            plan.bootstrap_el0_arena_size = arena.len;
+        }
+        plan
+    }
+
+    pub const fn bootstrap_el0_backing_frame_request(self) -> BootstrapEl0BackingFrameRequest {
+        BootstrapEl0BackingFrameRequest::new(
+            self.bootstrap_el0_arena_base,
+            self.bootstrap_el0_arena_size,
+        )
     }
 }
 
@@ -177,11 +205,46 @@ const fn is_page_aligned(value: u64) -> bool {
 mod tests {
     use super::{
         BootstrapEl0BackingFramePlan, BootstrapEl0BackingFrameReadiness,
-        BootstrapEl0BackingFrameRequest,
+        BootstrapEl0BackingFrameRequest, FrameAllocatorPlan,
     };
     use crate::arch::arm64::mmu::{
         BootstrapEl0MappingReadiness, BootstrapEl0MappingRequest, PageTablePlan,
     };
+    use crate::bootinfo::{NovaBootInfoV1, NovaBootInfoV2, NovaBootstrapFrameArenaDescriptorV1};
+
+    #[test]
+    fn frame_allocator_plan_prefers_valid_bootinfo_v2_bootstrap_frame_arena() {
+        let boot_info = NovaBootInfoV1::new();
+        let mut boot_info_v2 = NovaBootInfoV2::new();
+        boot_info_v2.bootstrap_frame_arena = NovaBootstrapFrameArenaDescriptorV1 {
+            base: 0x9000_0000,
+            len: 0x20_000,
+            page_size: NovaBootstrapFrameArenaDescriptorV1::PAGE_SIZE_4K,
+            flags: 0,
+        };
+
+        let plan = FrameAllocatorPlan::from_boot_info_with_v2(&boot_info, Some(&boot_info_v2));
+
+        assert_eq!(plan.bootstrap_el0_arena_base, 0x9000_0000);
+        assert_eq!(plan.bootstrap_el0_arena_size, 0x20_000);
+        assert_eq!(
+            plan.bootstrap_el0_backing_frame_request(),
+            BootstrapEl0BackingFrameRequest::new(0x9000_0000, 0x20_000)
+        );
+    }
+
+    #[test]
+    fn frame_allocator_plan_keeps_missing_bootstrap_frame_arena_empty() {
+        let boot_info = NovaBootInfoV1::new();
+        let boot_info_v2 = NovaBootInfoV2::new();
+
+        let plan = FrameAllocatorPlan::from_boot_info_with_v2(&boot_info, Some(&boot_info_v2));
+
+        assert_eq!(
+            plan.bootstrap_el0_backing_frame_request(),
+            BootstrapEl0BackingFrameRequest::new(0, 0)
+        );
+    }
 
     #[test]
     fn bootstrap_el0_backing_frame_plan_carves_image_context_and_stack_frames() {

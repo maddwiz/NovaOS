@@ -17,8 +17,9 @@ pub use bootinfo::{
     NovaBootInfoV1,
 };
 pub use bootinfo_v2::{
-    NovaBootInfoV2, NovaBootstrapPayloadDescriptorV1, NovaBootstrapUserWindowDescriptorV1,
-    NovaDisplayPathDescriptorV1, NovaFramebufferDescriptorV1, NovaNetworkSeedV1, NovaStorageSeedV1,
+    NovaBootInfoV2, NovaBootstrapFrameArenaDescriptorV1, NovaBootstrapPayloadDescriptorV1,
+    NovaBootstrapUserWindowDescriptorV1, NovaDisplayPathDescriptorV1, NovaFramebufferDescriptorV1,
+    NovaNetworkSeedV1, NovaStorageSeedV1,
 };
 pub use bootstrap_task::{
     NovaBootstrapKernelCallEntryV1, NovaBootstrapTaskContextV1, NovaBootstrapTaskContextV2,

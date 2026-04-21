@@ -191,6 +191,49 @@ impl NovaBootstrapUserWindowDescriptorV1 {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct NovaBootstrapFrameArenaDescriptorV1 {
+    pub base: u64,
+    pub len: u64,
+    pub page_size: u32,
+    pub flags: u32,
+}
+
+impl NovaBootstrapFrameArenaDescriptorV1 {
+    pub const PAGE_SIZE_4K: u32 = 4096;
+
+    pub const fn empty() -> Self {
+        Self {
+            base: 0,
+            len: 0,
+            page_size: 0,
+            flags: 0,
+        }
+    }
+
+    pub const fn is_empty(&self) -> bool {
+        self.base == 0 && self.len == 0 && self.page_size == 0 && self.flags == 0
+    }
+
+    pub const fn is_valid(&self) -> bool {
+        if self.is_empty() {
+            return true;
+        }
+
+        if self.base == 0
+            || self.len == 0
+            || self.page_size != Self::PAGE_SIZE_4K
+            || self.flags != 0
+        {
+            return false;
+        }
+
+        let page_size = Self::PAGE_SIZE_4K as u64;
+        self.base % page_size == 0 && self.len % page_size == 0
+    }
+}
+
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NovaBootInfoV2 {
     pub magic: u64,
@@ -247,6 +290,7 @@ pub struct NovaBootInfoV2 {
     pub observatory_hash_ptr: u64,
     pub bootstrap_payload: NovaBootstrapPayloadDescriptorV1,
     pub bootstrap_user_window: NovaBootstrapUserWindowDescriptorV1,
+    pub bootstrap_frame_arena: NovaBootstrapFrameArenaDescriptorV1,
 }
 
 impl NovaBootInfoV2 {
@@ -301,6 +345,7 @@ impl NovaBootInfoV2 {
         observatory_hash_ptr: 0,
         bootstrap_payload: NovaBootstrapPayloadDescriptorV1::empty(),
         bootstrap_user_window: NovaBootstrapUserWindowDescriptorV1::empty(),
+        bootstrap_frame_arena: NovaBootstrapFrameArenaDescriptorV1::empty(),
     };
 
     pub const fn new() -> Self {
@@ -320,6 +365,7 @@ impl NovaBootInfoV2 {
             && self.version == Self::VERSION
             && self.bootstrap_payload.is_valid()
             && self.bootstrap_user_window.is_valid()
+            && self.bootstrap_frame_arena.is_valid()
     }
 
     pub const fn memory_map_present(&self) -> bool {
@@ -333,14 +379,15 @@ impl NovaBootInfoV2 {
 
 const _: [(); 40] = [(); size_of::<NovaBootstrapPayloadDescriptorV1>()];
 const _: [(); 32] = [(); size_of::<NovaBootstrapUserWindowDescriptorV1>()];
-const _: [(); 344] = [(); size_of::<NovaBootInfoV2>()];
+const _: [(); 24] = [(); size_of::<NovaBootstrapFrameArenaDescriptorV1>()];
+const _: [(); 368] = [(); size_of::<NovaBootInfoV2>()];
 
 #[cfg(test)]
 mod tests {
     use super::{
-        NovaBootInfoV2, NovaBootstrapPayloadDescriptorV1, NovaBootstrapUserWindowDescriptorV1,
-        NovaDisplayPathDescriptorV1, NovaFramebufferDescriptorV1, NovaNetworkSeedV1,
-        NovaStorageSeedV1,
+        NovaBootInfoV2, NovaBootstrapFrameArenaDescriptorV1, NovaBootstrapPayloadDescriptorV1,
+        NovaBootstrapUserWindowDescriptorV1, NovaDisplayPathDescriptorV1,
+        NovaFramebufferDescriptorV1, NovaNetworkSeedV1, NovaStorageSeedV1,
     };
     use crate::{BootSource, FramebufferFormat};
     use core::mem::{offset_of, size_of};
@@ -354,7 +401,8 @@ mod tests {
         assert_eq!(size_of::<NovaNetworkSeedV1>(), 16);
         assert_eq!(size_of::<NovaBootstrapPayloadDescriptorV1>(), 40);
         assert_eq!(size_of::<NovaBootstrapUserWindowDescriptorV1>(), 32);
-        assert_eq!(size_of::<NovaBootInfoV2>(), 344);
+        assert_eq!(size_of::<NovaBootstrapFrameArenaDescriptorV1>(), 24);
+        assert_eq!(size_of::<NovaBootInfoV2>(), 368);
 
         assert_eq!(offset_of!(NovaBootInfoV2, cpu_arch), 16);
         assert_eq!(offset_of!(NovaBootInfoV2, firmware_vendor_ptr), 32);
@@ -363,6 +411,7 @@ mod tests {
         assert_eq!(offset_of!(NovaBootInfoV2, init_capsule_ptr), 208);
         assert_eq!(offset_of!(NovaBootInfoV2, bootstrap_payload), 272);
         assert_eq!(offset_of!(NovaBootInfoV2, bootstrap_user_window), 312);
+        assert_eq!(offset_of!(NovaBootInfoV2, bootstrap_frame_arena), 344);
     }
 
     #[test]
@@ -377,6 +426,7 @@ mod tests {
         assert_eq!(info.framebuffer.format, FramebufferFormat::Unknown);
         assert!(info.bootstrap_payload.is_empty());
         assert!(info.bootstrap_user_window.is_empty());
+        assert!(info.bootstrap_frame_arena.is_empty());
         assert!(!info.memory_map_present());
         assert!(!info.framebuffer_present());
     }
@@ -444,5 +494,42 @@ mod tests {
             .is_valid()
         );
         assert!(!NovaBootstrapUserWindowDescriptorV1 { flags: 1, ..valid }.is_valid());
+    }
+
+    #[test]
+    fn bootstrap_frame_arena_descriptor_requires_page_aligned_arena() {
+        let empty = NovaBootstrapFrameArenaDescriptorV1::empty();
+        assert!(empty.is_valid());
+
+        let valid = NovaBootstrapFrameArenaDescriptorV1 {
+            base: 0x9000_0000,
+            len: 0x20_000,
+            page_size: NovaBootstrapFrameArenaDescriptorV1::PAGE_SIZE_4K,
+            flags: 0,
+        };
+        assert!(valid.is_valid());
+
+        assert!(
+            !NovaBootstrapFrameArenaDescriptorV1 {
+                base: 0x9000_0001,
+                ..valid
+            }
+            .is_valid()
+        );
+        assert!(
+            !NovaBootstrapFrameArenaDescriptorV1 {
+                len: 0x20_001,
+                ..valid
+            }
+            .is_valid()
+        );
+        assert!(
+            !NovaBootstrapFrameArenaDescriptorV1 {
+                page_size: 16 * 1024,
+                ..valid
+            }
+            .is_valid()
+        );
+        assert!(!NovaBootstrapFrameArenaDescriptorV1 { flags: 1, ..valid }.is_valid());
     }
 }

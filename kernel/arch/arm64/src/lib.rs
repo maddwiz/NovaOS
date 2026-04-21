@@ -15,6 +15,8 @@ pub mod panic;
 pub mod syscall;
 pub mod trace;
 
+#[cfg(all(target_os = "none", target_arch = "aarch64"))]
+use arch::arm64::allocator::BootstrapEl0BackingFramePlan;
 use arch::arm64::allocator::FrameAllocatorPlan;
 use arch::arm64::exceptions::ExceptionClass;
 use arch::arm64::exceptions::ExceptionVectors;
@@ -451,6 +453,7 @@ pub fn kernel_main<C: ConsoleSink>(context: KernelContext<'_, C>) -> ! {
                 launch_plan,
                 bringup.init_capsule,
                 bringup.page_tables,
+                bringup.allocator,
             );
         }
     }
@@ -530,7 +533,7 @@ pub fn prepare_bringup(
             .unwrap_or(false),
         exception_vectors: ExceptionVectors::runtime(),
         page_tables: PageTablePlan::from_boot_info_with_v2(boot_info, boot_info_v2),
-        allocator: FrameAllocatorPlan::from_boot_info(boot_info),
+        allocator: FrameAllocatorPlan::from_boot_info_with_v2(boot_info, boot_info_v2),
     })
 }
 
@@ -836,6 +839,7 @@ fn enter_bootstrap_task<C: ConsoleSink>(
     launch_plan: BootstrapTaskLaunchPlan,
     init_capsule: Option<BootstrapCapsuleSummary>,
     page_tables: PageTablePlan,
+    allocator: FrameAllocatorPlan,
 ) -> ! {
     sync_instruction_cache(
         launch_plan.image_base as *const u8,
@@ -844,7 +848,7 @@ fn enter_bootstrap_task<C: ConsoleSink>(
     let context = init_capsule
         .map(build_bootstrap_task_context)
         .unwrap_or(core::ptr::null());
-    log_bootstrap_el0_mapping_plan(console, launch_plan, context, page_tables);
+    log_bootstrap_el0_boundary_plan(console, launch_plan, context, page_tables, allocator);
     let payload_entry: BootstrapTaskEntry = unsafe {
         core::mem::transmute::<usize, BootstrapTaskEntry>(launch_plan.entry_point as usize)
     };
@@ -879,6 +883,7 @@ fn enter_bootstrap_task<C: ConsoleSink>(
     _launch_plan: BootstrapTaskLaunchPlan,
     _init_capsule: Option<BootstrapCapsuleSummary>,
     _page_tables: PageTablePlan,
+    _allocator: FrameAllocatorPlan,
 ) -> ! {
     panic::log_and_halt(
         console,
@@ -887,11 +892,12 @@ fn enter_bootstrap_task<C: ConsoleSink>(
 }
 
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]
-fn log_bootstrap_el0_mapping_plan<C: ConsoleSink>(
+fn log_bootstrap_el0_boundary_plan<C: ConsoleSink>(
     console: &mut C,
     launch_plan: BootstrapTaskLaunchPlan,
     context: *const NovaBootstrapTaskContextV1,
     page_tables: PageTablePlan,
+    allocator: FrameAllocatorPlan,
 ) {
     let context_size = if context.is_null() {
         0
@@ -910,10 +916,27 @@ fn log_bootstrap_el0_mapping_plan<C: ConsoleSink>(
             page_tables.user_stack_size
         },
     );
-    let plan = page_tables.bootstrap_el0_mapping_plan(request);
+    let mapping = page_tables.bootstrap_el0_mapping_plan(request);
 
     console.write_str("[info] bootstrap el0 mapping ");
-    console.write_line(plan.readiness.label());
+    console.write_line(mapping.readiness.label());
+
+    let backing = BootstrapEl0BackingFramePlan::from_mapping_plan(
+        mapping,
+        allocator.bootstrap_el0_backing_frame_request(),
+    );
+    console.write_str("[info] bootstrap el0 backing frames ");
+    console.write_line(backing.readiness.label());
+
+    console.write_str("[info] bootstrap el0 page tables ");
+    if backing.ready() {
+        let page_tables = mapping.page_table_plan(
+            backing.page_table_request(page_tables.kernel_base, page_tables.kernel_size),
+        );
+        console.write_line(page_tables.readiness.label());
+    } else {
+        console.write_line("backing-frames-not-ready");
+    }
 }
 
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]
@@ -1982,7 +2005,7 @@ mod tests {
         resolve_optional_boot_info_v2, resolve_verification_info,
         run_lower_el_bootstrap_svc_dry_run,
     };
-    use crate::bootinfo::{BootSource, FramebufferFormat};
+    use crate::bootinfo::{BootSource, FramebufferFormat, NovaBootstrapFrameArenaDescriptorV1};
     use crate::console::ConsoleSink;
     use crate::syscall::{
         BootstrapTaskState, CurrentTaskState, SyscallDispatchState, install_bootstrap_syscall_state,
@@ -2080,6 +2103,8 @@ mod tests {
         assert_eq!(bringup.allocator.usable_base, init_capsule.as_ptr() as u64);
         assert_eq!(bringup.allocator.usable_limit, init_capsule_len() as u64);
         assert_eq!(bringup.allocator.reserved_bytes, 0x5000);
+        assert_eq!(bringup.allocator.bootstrap_el0_arena_base, 0x9000_0000);
+        assert_eq!(bringup.allocator.bootstrap_el0_arena_size, 0x20_000);
         assert_eq!(init_capsule_summary.service_name(), "initd");
         assert_eq!(
             init_capsule_summary.requested_capabilities,
@@ -2494,6 +2519,12 @@ mod tests {
         info_v2.init_capsule_len = info.init_capsule_len;
         info_v2.loader_log_ptr = info.loader_log_ptr;
         info_v2.kernel_image_hash_ptr = info.kernel_image_hash_ptr;
+        info_v2.bootstrap_frame_arena = NovaBootstrapFrameArenaDescriptorV1 {
+            base: 0x9000_0000,
+            len: 0x20_000,
+            page_size: NovaBootstrapFrameArenaDescriptorV1::PAGE_SIZE_4K,
+            flags: 0,
+        };
         if let Some(payload) = InitCapsuleImage::parse(init_capsule)
             .and_then(|capsule| capsule.bootstrap_service_payload())
         {

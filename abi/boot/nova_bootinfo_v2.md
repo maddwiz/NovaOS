@@ -31,10 +31,13 @@ Compared with v1, the draft adds:
 - `observatory_hash_ptr`
 - `bootstrap_payload`
 - `bootstrap_user_window`
+- `bootstrap_frame_arena`
 
 `bootstrap_user_window` is empty by default. When present, it describes the initial 4 KiB page-aligned EL0 bootstrap user window and stack reservation that the kernel may use to rebase the embedded bootstrap payload instead of treating firmware config-table fields as a user address-space contract. Its `flags` field is reserved and must be zero in the current draft.
 
 The current `novaaa64` loader populates this descriptor only after it has a valid embedded bootstrap-payload descriptor. The descriptor is a portable virtual-address policy, not a Spark/GB10 physical allocation and not proof that EL0 page tables are active.
+
+`bootstrap_frame_arena` is empty by default. When present, it describes a 4 KiB page-aligned loader-reserved physical arena that the kernel may use as the transitional backing storage for the initial EL0 bootstrap image, context, and stack planning path. Its `flags` field is reserved and must be zero in the current draft. The current `novaaa64` loader allocates this arena from `LOADER_DATA` pages after it has a valid bootstrap user-window policy; it is still planning input and does not mean the MMU is enabled.
 
 ## Accelerator seed doctrine
 

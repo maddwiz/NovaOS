@@ -11,6 +11,8 @@ pub mod arch;
 pub mod boot_contract;
 pub mod bootinfo;
 pub mod console;
+pub mod diag;
+pub mod el;
 pub mod mm;
 pub mod panic;
 pub mod syscall;
@@ -19,7 +21,6 @@ pub mod trace;
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]
 use arch::arm64::allocator::BootstrapEl0BackingFramePlan;
 use arch::arm64::allocator::FrameAllocatorPlan;
-use arch::arm64::exceptions::ExceptionClass;
 use arch::arm64::exceptions::ExceptionVectors;
 #[cfg(all(
     target_os = "none",
@@ -48,11 +49,55 @@ use bootinfo::{NovaImageDigestV1, NovaVerificationInfoV1};
 use console::{BootConsole, ConsoleSink};
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]
 use core::mem::size_of;
+use diag::run_syscall_probe;
+pub(crate) use diag::trace_kernel_stage0_marker;
+#[cfg(all(target_os = "none", target_arch = "aarch64"))]
+use diag::write_hex_u64;
+#[cfg(all(
+    target_os = "none",
+    target_arch = "aarch64",
+    any(
+        feature = "bootstrap_kernel_svc_probe",
+        feature = "bootstrap_pretransfer_svc_probe",
+        feature = "bootstrap_trap_vector_trace"
+    )
+))]
+use el::read_runtime_vbar_el1;
+#[cfg(all(target_os = "none", target_arch = "aarch64"))]
+use el::{
+    BOOTSTRAP_TASK_STACK_SIZE, BootstrapTaskEntry, enter_bootstrap_task_with_stack,
+    read_runtime_current_el,
+};
+#[cfg(test)]
+use el::{
+    BootstrapTaskBoundaryPlan, BootstrapTaskSyscallBoundary, BootstrapTaskTransferMode,
+    bootstrap_task_boundary_plan, bootstrap_task_target_boundary_plan,
+    bootstrap_task_transfer_mode,
+};
+#[cfg(all(target_os = "none", target_arch = "aarch64"))]
+use el::{
+    BootstrapTaskBoundaryPlan, bootstrap_task_boundary_plan, bootstrap_task_target_boundary_plan,
+};
 
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]
 use crate::console::TraceConsole;
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]
 use nova_rt::NovaBootstrapTaskContextV2;
+#[cfg(all(
+    target_os = "none",
+    target_arch = "aarch64",
+    feature = "bootstrap_kernel_svc_probe"
+))]
+use nova_rt::NovaSyscallNumberV1;
+#[cfg(all(
+    target_os = "none",
+    target_arch = "aarch64",
+    any(
+        feature = "bootstrap_kernel_svc_probe",
+        feature = "bootstrap_pretransfer_svc_probe"
+    )
+))]
+use nova_rt::NovaSyscallStatusV1;
 #[cfg(all(
     target_os = "none",
     target_arch = "aarch64",
@@ -63,37 +108,14 @@ use nova_rt::NovaBootstrapTaskContextV2;
 ))]
 use nova_rt::syscall::trace;
 use nova_rt::{
-    NovaBootstrapTaskContextV1, NovaInitCapsuleCapabilityV1, NovaSyscallNumberV1,
-    NovaSyscallRequestV1, NovaSyscallResultV1, NovaSyscallStatusV1, resolve_bootstrap_task_context,
+    NovaBootstrapTaskContextV1, NovaInitCapsuleCapabilityV1, NovaSyscallRequestV1,
+    NovaSyscallResultV1, resolve_bootstrap_task_context,
 };
 use syscall::{
-    Arm64SyscallFrame, CurrentTaskState, SyscallDispatchState, bootstrap_syscall_state,
-    dispatch_syscall, handle_lower_el_bootstrap_syscall_exception, handle_syscall_exception,
+    CurrentTaskState, SyscallDispatchState, bootstrap_syscall_state, dispatch_syscall,
     install_bootstrap_syscall_state,
 };
 
-#[cfg(all(target_os = "none", target_arch = "aarch64"))]
-type BootstrapTaskEntry = unsafe extern "C" fn(*const NovaBootstrapTaskContextV1) -> !;
-#[cfg(all(target_os = "none", target_arch = "aarch64"))]
-const BOOTSTRAP_TASK_STACK_SIZE: usize = 64 * 1024;
-#[cfg(all(target_os = "none", target_arch = "aarch64"))]
-const SPSR_EL2_MASKED_EL1H: usize = 0x3c5;
-#[cfg(all(
-    target_os = "none",
-    target_arch = "aarch64",
-    feature = "bootstrap_el0_probe"
-))]
-const SPSR_EL1_MASKED_EL0T: usize = 0x3c0;
-#[cfg(all(
-    target_os = "none",
-    target_arch = "aarch64",
-    feature = "bootstrap_el0_probe"
-))]
-const SCTLR_EL1_MMU_CACHE_ENABLE_MASK: usize = 0x1005;
-#[cfg(all(target_os = "none", target_arch = "aarch64"))]
-const HCR_EL2_RW: usize = 1usize << 31;
-#[cfg(all(target_os = "none", target_arch = "aarch64"))]
-static mut BOOTSTRAP_TASK_STACK: [u8; BOOTSTRAP_TASK_STACK_SIZE] = [0; BOOTSTRAP_TASK_STACK_SIZE];
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]
 static mut BOOTSTRAP_TASK_CONTEXT: NovaBootstrapTaskContextV2 = NovaBootstrapTaskContextV2::empty();
 
@@ -146,91 +168,6 @@ impl BootstrapKernelSvcCallerCapture {
 ))]
 static mut BOOTSTRAP_KERNEL_SVC_CALLER_CAPTURE: BootstrapKernelSvcCallerCapture =
     BootstrapKernelSvcCallerCapture::unset();
-
-#[cfg(any(test, all(target_os = "none", target_arch = "aarch64")))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum BootstrapTaskTransferMode {
-    SameEl,
-    DropToEl1,
-    DropToEl0,
-}
-
-#[cfg(any(test, all(target_os = "none", target_arch = "aarch64")))]
-impl BootstrapTaskTransferMode {
-    const fn label(self) -> &'static str {
-        match self {
-            Self::SameEl => "same-el",
-            Self::DropToEl1 => "drop-to-el1",
-            Self::DropToEl0 => "drop-to-el0",
-        }
-    }
-}
-
-#[cfg(any(test, all(target_os = "none", target_arch = "aarch64")))]
-#[allow(dead_code)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum BootstrapTaskSyscallBoundary {
-    CurrentElSvc,
-    El0Svc,
-}
-
-#[cfg(any(test, all(target_os = "none", target_arch = "aarch64")))]
-impl BootstrapTaskSyscallBoundary {
-    const fn label(self) -> &'static str {
-        match self {
-            Self::CurrentElSvc => "current-el-svc",
-            Self::El0Svc => "el0-svc",
-        }
-    }
-}
-
-#[cfg(any(test, all(target_os = "none", target_arch = "aarch64")))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct BootstrapTaskBoundaryPlan {
-    current_el: u8,
-    target_el: u8,
-    transfer_mode: BootstrapTaskTransferMode,
-    task_isolated: bool,
-    syscall_boundary: BootstrapTaskSyscallBoundary,
-}
-
-#[cfg(any(test, all(target_os = "none", target_arch = "aarch64")))]
-const fn bootstrap_task_transfer_mode(current_el: u8) -> BootstrapTaskTransferMode {
-    if current_el == 2 {
-        BootstrapTaskTransferMode::DropToEl1
-    } else {
-        BootstrapTaskTransferMode::SameEl
-    }
-}
-
-#[cfg(any(test, all(target_os = "none", target_arch = "aarch64")))]
-const fn bootstrap_task_boundary_plan(current_el: u8) -> BootstrapTaskBoundaryPlan {
-    let transfer_mode = bootstrap_task_transfer_mode(current_el);
-    let target_el = match transfer_mode {
-        BootstrapTaskTransferMode::DropToEl1 => 1,
-        BootstrapTaskTransferMode::DropToEl0 => 0,
-        BootstrapTaskTransferMode::SameEl => current_el,
-    };
-
-    BootstrapTaskBoundaryPlan {
-        current_el,
-        target_el,
-        transfer_mode,
-        task_isolated: false,
-        syscall_boundary: BootstrapTaskSyscallBoundary::CurrentElSvc,
-    }
-}
-
-#[cfg(any(test, all(target_os = "none", target_arch = "aarch64")))]
-const fn bootstrap_task_target_boundary_plan(current_el: u8) -> BootstrapTaskBoundaryPlan {
-    BootstrapTaskBoundaryPlan {
-        current_el,
-        target_el: 0,
-        transfer_mode: BootstrapTaskTransferMode::DropToEl0,
-        task_isolated: true,
-        syscall_boundary: BootstrapTaskSyscallBoundary::El0Svc,
-    }
-}
 
 #[cfg(all(
     target_os = "none",
@@ -1029,37 +966,6 @@ unsafe extern "C" fn bootstrap_pretransfer_svc_probe_entry(
 }
 
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]
-unsafe fn enter_bootstrap_task_with_stack(
-    entry: BootstrapTaskEntry,
-    context: *const NovaBootstrapTaskContextV1,
-    boundary_plan: BootstrapTaskBoundaryPlan,
-) -> ! {
-    let el1_stack_top = unsafe {
-        let stack_base = core::ptr::addr_of_mut!(BOOTSTRAP_TASK_STACK) as *mut u8;
-        (stack_base.add(BOOTSTRAP_TASK_STACK_SIZE) as usize) & !0xfusize
-    };
-    #[cfg(feature = "bootstrap_el0_probe")]
-    let el0_stack_top = unsafe {
-        let stack_base = core::ptr::addr_of_mut!(BOOTSTRAP_TASK_STACK) as *mut u8;
-        (stack_base.add(BOOTSTRAP_TASK_STACK_SIZE / 2) as usize) & !0xfusize
-    };
-    match boundary_plan.transfer_mode {
-        BootstrapTaskTransferMode::SameEl => unsafe {
-            enter_bootstrap_task_same_el(entry, context, el1_stack_top)
-        },
-        BootstrapTaskTransferMode::DropToEl1 => unsafe {
-            enter_bootstrap_task_via_el1(entry, context, el1_stack_top)
-        },
-        #[cfg(feature = "bootstrap_el0_probe")]
-        BootstrapTaskTransferMode::DropToEl0 => unsafe {
-            enter_bootstrap_task_via_el0(entry, context, el0_stack_top, el1_stack_top)
-        },
-        #[cfg(not(feature = "bootstrap_el0_probe"))]
-        BootstrapTaskTransferMode::DropToEl0 => panic::halt(),
-    }
-}
-
-#[cfg(all(target_os = "none", target_arch = "aarch64"))]
 fn log_bootstrap_task_boundary<C: ConsoleSink>(
     console: &mut C,
     boundary_plan: BootstrapTaskBoundaryPlan,
@@ -1099,146 +1005,6 @@ fn log_bootstrap_task_target_boundary<C: ConsoleSink>(
     }
     console.write_str(" syscall ");
     console.write_line(boundary_plan.syscall_boundary.label());
-}
-
-#[cfg(all(target_os = "none", target_arch = "aarch64"))]
-fn read_runtime_current_el() -> u8 {
-    let current_el: u64;
-    unsafe {
-        core::arch::asm!("mrs {}, CurrentEL", out(reg) current_el);
-    }
-    ((current_el >> 2) & 0b11) as u8
-}
-
-#[cfg(all(
-    target_os = "none",
-    target_arch = "aarch64",
-    any(
-        feature = "bootstrap_kernel_svc_probe",
-        feature = "bootstrap_pretransfer_svc_probe",
-        feature = "bootstrap_trap_vector_trace"
-    )
-))]
-fn read_runtime_vbar_el1() -> u64 {
-    let vbar_el1: u64;
-    unsafe {
-        core::arch::asm!("mrs {}, vbar_el1", out(reg) vbar_el1);
-    }
-    vbar_el1
-}
-
-#[cfg(all(target_os = "none", target_arch = "aarch64"))]
-unsafe fn enter_bootstrap_task_same_el(
-    entry: BootstrapTaskEntry,
-    context: *const NovaBootstrapTaskContextV1,
-    stack_top: usize,
-) -> ! {
-    unsafe {
-        core::arch::asm!(
-            "msr SPSel, #1",
-            "isb",
-            "msr sp_el0, x10",
-            "mov sp, x10",
-            "mov x1, xzr",
-            "mov x2, xzr",
-            "mov x3, xzr",
-            "mov x4, xzr",
-            "mov x5, xzr",
-            "mov x6, xzr",
-            "mov x7, xzr",
-            "mov x8, xzr",
-            "mov x29, xzr",
-            "mov x30, xzr",
-            "br x9",
-            in("x0") context as usize,
-            in("x9") entry as usize,
-            in("x10") stack_top,
-            options(noreturn),
-        );
-    }
-}
-
-#[cfg(all(target_os = "none", target_arch = "aarch64"))]
-unsafe fn enter_bootstrap_task_via_el1(
-    entry: BootstrapTaskEntry,
-    context: *const NovaBootstrapTaskContextV1,
-    stack_top: usize,
-) -> ! {
-    unsafe {
-        core::arch::asm!(
-            "mrs x13, hcr_el2",
-            "orr x13, x13, x12",
-            "msr hcr_el2, x13",
-            "isb",
-            "msr sp_el0, x10",
-            "msr sp_el1, x10",
-            "msr elr_el2, x9",
-            "msr spsr_el2, x11",
-            "mov x1, xzr",
-            "mov x2, xzr",
-            "mov x3, xzr",
-            "mov x4, xzr",
-            "mov x5, xzr",
-            "mov x6, xzr",
-            "mov x7, xzr",
-            "mov x8, xzr",
-            "mov x29, xzr",
-            "mov x30, xzr",
-            "eret",
-            in("x0") context as usize,
-            in("x9") entry as usize,
-            in("x10") stack_top,
-            in("x11") SPSR_EL2_MASKED_EL1H,
-            in("x12") HCR_EL2_RW,
-            options(noreturn),
-        );
-    }
-}
-
-#[cfg(all(
-    target_os = "none",
-    target_arch = "aarch64",
-    feature = "bootstrap_el0_probe"
-))]
-unsafe fn enter_bootstrap_task_via_el0(
-    entry: BootstrapTaskEntry,
-    context: *const NovaBootstrapTaskContextV1,
-    el0_stack_top: usize,
-    el1_stack_top: usize,
-) -> ! {
-    unsafe {
-        core::arch::asm!(
-            "msr SPSel, #1",
-            "isb",
-            "mov sp, x12",
-            "msr sp_el0, x10",
-            "msr elr_el1, x9",
-            "msr spsr_el1, x11",
-            "mrs x13, sctlr_el1",
-            "bic x13, x13, x14",
-            "dsb sy",
-            "msr sctlr_el1, x13",
-            "isb",
-            "mov x1, xzr",
-            "mov x2, xzr",
-            "mov x3, xzr",
-            "mov x4, xzr",
-            "mov x5, xzr",
-            "mov x6, xzr",
-            "mov x7, xzr",
-            "mov x8, xzr",
-            "mov x29, xzr",
-            "mov x30, xzr",
-            "eret",
-            in("x0") context as usize,
-            in("x9") entry as usize,
-            in("x10") el0_stack_top,
-            in("x11") SPSR_EL1_MASKED_EL0T,
-            in("x12") el1_stack_top,
-            in("x14") SCTLR_EL1_MMU_CACHE_ENABLE_MASK,
-            options(noreturn),
-        );
-    }
 }
 
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]
@@ -1450,227 +1216,6 @@ fn bootstrap_syscall_dispatch_state(
         .unwrap_or_else(SyscallDispatchState::scaffold)
 }
 
-fn run_syscall_probe<C: ConsoleSink>(console: &mut C, state: SyscallDispatchState) {
-    let denied_trace = dispatch_syscall(
-        &SyscallDispatchState::scaffold(),
-        NovaSyscallRequestV1::new(NovaSyscallNumberV1::Trace, 0, [0xDEAD_BEEF, 0, 0, 0, 0, 0]),
-        console,
-    );
-    let request = NovaSyscallRequestV1::new(
-        NovaSyscallNumberV1::Trace,
-        0,
-        [0xCAFE_BABE, 0x5151_0001, 0, 0, 0, 0],
-    );
-    let mut frame = Arm64SyscallFrame::from_request(request);
-    frame.elr = 0x4000;
-
-    let handled = handle_syscall_exception(
-        (ExceptionClass::Svc64 as u32) << 26,
-        &mut frame,
-        &state,
-        console,
-    );
-
-    if denied_trace.status == NovaSyscallStatusV1::Denied as u32
-        && handled
-        && frame.registers[Arm64SyscallFrame::STATUS_REGISTER] == NovaSyscallStatusV1::Ok as u64
-        && frame.registers[Arm64SyscallFrame::VALUE0_REGISTER] == 0xCAFE_BABE
-        && frame.registers[Arm64SyscallFrame::VALUE1_REGISTER] == 0x5151_0001
-        && frame.elr == 0x4004
-    {
-        console.log(console::LogLevel::Info, "bootstrap capability probe passed");
-    } else {
-        console.log(
-            console::LogLevel::Error,
-            "bootstrap capability probe failed",
-        );
-    }
-
-    let endpoint_probe_result = (state
-        .has_bootstrap_capability(NovaInitCapsuleCapabilityV1::EndpointBootstrap)
-        && state.contains_endpoint_slot(0))
-    .then(|| {
-        dispatch_syscall(
-            &state,
-            NovaSyscallRequestV1::new(
-                NovaSyscallNumberV1::EndpointCall,
-                0,
-                [0, 0x454E_4450, 0, 0, 0, 0],
-            ),
-            console,
-        )
-    });
-
-    match endpoint_probe_result {
-        Some(result) => {
-            let status_raw = result.status;
-            if status_raw == NovaSyscallStatusV1::Ok as u32
-                && result.value0 == 0
-                && result.value1 == 0x454E_4450
-            {
-                console.log(console::LogLevel::Info, "bootstrap endpoint probe passed");
-            } else {
-                console.log(console::LogLevel::Error, "bootstrap endpoint probe failed");
-                console.write_str("[error] bootstrap endpoint probe status ");
-                write_hex_u64(console, status_raw as u64);
-                console.write_str(" value0 ");
-                write_hex_u64(console, result.value0);
-                console.write_str(" value1 ");
-                write_hex_u64(console, result.value1);
-                console.write_str("\n");
-            }
-        }
-        None => console.log(console::LogLevel::Info, "bootstrap endpoint probe skipped"),
-    }
-
-    let shared_memory_probe_result = (state
-        .has_bootstrap_capability(NovaInitCapsuleCapabilityV1::SharedMemoryBootstrap)
-        && state.contains_shared_memory_region(0))
-    .then(|| {
-        dispatch_syscall(
-            &state,
-            NovaSyscallRequestV1::new(
-                NovaSyscallNumberV1::SharedMemoryMap,
-                0,
-                [0, 0x5348_4D45_4D30, 0, 0, 0, 0],
-            ),
-            console,
-        )
-    });
-
-    match shared_memory_probe_result {
-        Some(result) => {
-            let status_raw = result.status;
-            if status_raw == NovaSyscallStatusV1::Ok as u32
-                && result.value0 == 0
-                && result.value1 == 0x5348_4D45_4D30
-            {
-                console.log(
-                    console::LogLevel::Info,
-                    "bootstrap shared memory probe passed",
-                );
-            } else {
-                console.log(
-                    console::LogLevel::Error,
-                    "bootstrap shared memory probe failed",
-                );
-                console.write_str("[error] bootstrap shared memory probe status ");
-                write_hex_u64(console, status_raw as u64);
-                console.write_str(" value0 ");
-                write_hex_u64(console, result.value0);
-                console.write_str(" value1 ");
-                write_hex_u64(console, result.value1);
-                console.write_str("\n");
-            }
-        }
-        None => console.log(
-            console::LogLevel::Info,
-            "bootstrap shared memory probe skipped",
-        ),
-    }
-
-    run_lower_el_bootstrap_svc_dry_run(console, &state);
-}
-
-fn run_lower_el_bootstrap_svc_dry_run<C: ConsoleSink>(
-    console: &mut C,
-    state: &SyscallDispatchState,
-) {
-    const TRACE_VALUE0: u64 = 0x4C4F_5745_4C53_5643;
-    const TRACE_VALUE1: u64 = 0x4E4F_5641_454C_3030;
-    const RETURN_ELR: u64 = 0x8004;
-
-    let request = NovaSyscallRequestV1::new(
-        NovaSyscallNumberV1::Trace,
-        0,
-        [TRACE_VALUE0, TRACE_VALUE1, 0, 0, 0, 0],
-    );
-    let mut frame = Arm64SyscallFrame::from_request(request);
-    frame.elr = RETURN_ELR - Arm64SyscallFrame::SYSCALL_INSTRUCTION_LEN;
-
-    install_bootstrap_syscall_state(*state);
-    let handled = handle_lower_el_bootstrap_syscall_exception(
-        (ExceptionClass::Svc64 as u32) << 26,
-        &mut frame,
-        console,
-    );
-
-    if handled
-        && frame.registers[Arm64SyscallFrame::STATUS_REGISTER] == NovaSyscallStatusV1::Ok as u64
-        && frame.registers[Arm64SyscallFrame::VALUE0_REGISTER] == TRACE_VALUE0
-        && frame.registers[Arm64SyscallFrame::VALUE1_REGISTER] == TRACE_VALUE1
-        && frame.elr == RETURN_ELR
-    {
-        console.log(
-            console::LogLevel::Info,
-            "bootstrap lower-el svc dry-run passed",
-        );
-    } else {
-        console.log(
-            console::LogLevel::Error,
-            "bootstrap lower-el svc dry-run failed",
-        );
-        console.write_str("[error] bootstrap lower-el svc dry-run handled ");
-        if handled {
-            console.write_str("true");
-        } else {
-            console.write_str("false");
-        }
-        console.write_str(" status ");
-        write_hex_u64(console, frame.registers[Arm64SyscallFrame::STATUS_REGISTER]);
-        console.write_str(" value0 ");
-        write_hex_u64(console, frame.registers[Arm64SyscallFrame::VALUE0_REGISTER]);
-        console.write_str(" value1 ");
-        write_hex_u64(console, frame.registers[Arm64SyscallFrame::VALUE1_REGISTER]);
-        console.write_str(" elr ");
-        write_hex_u64(console, frame.elr);
-        console.write_str("\n");
-    }
-}
-
-fn write_hex_u64<C: ConsoleSink>(console: &mut C, value: u64) {
-    const HEX: &[u8; 16] = b"0123456789ABCDEF";
-    let mut buffer = [b'0'; 18];
-    buffer[1] = b'x';
-
-    let mut shift = 60u32;
-    let mut index = 2usize;
-    while index < buffer.len() {
-        buffer[index] = HEX[((value >> shift) & 0xF) as usize];
-        shift = shift.saturating_sub(4);
-        index += 1;
-    }
-
-    let text = core::str::from_utf8(&buffer).unwrap_or("0x0000000000000000");
-    console.write_str(text);
-}
-
-#[cfg(all(
-    target_os = "none",
-    target_arch = "aarch64",
-    feature = "qemu_virt_trace"
-))]
-fn trace_kernel_stage0_marker(message: &[u8]) {
-    const PL011_BASE: usize = 0x0900_0000;
-    const PL011_DR: *mut u32 = PL011_BASE as *mut u32;
-    const PL011_FR: *const u32 = (PL011_BASE + 0x18) as *const u32;
-    const PL011_FR_TXFF: u32 = 1 << 5;
-
-    for &byte in message {
-        while unsafe { core::ptr::read_volatile(PL011_FR) } & PL011_FR_TXFF != 0 {}
-        unsafe {
-            core::ptr::write_volatile(PL011_DR, byte as u32);
-        }
-    }
-}
-
-#[cfg(not(all(
-    target_os = "none",
-    target_arch = "aarch64",
-    feature = "qemu_virt_trace"
-)))]
-fn trace_kernel_stage0_marker(_message: &[u8]) {}
-
 #[cfg(test)]
 mod tests {
     use super::{
@@ -1681,10 +1226,10 @@ mod tests {
         bootstrap_task_transfer_mode, dispatch_bootstrap_kernel_call, prepare_bringup,
         resolve_boot_info, resolve_boot_info_v2, resolve_kernel_image_digest, resolve_memory_map,
         resolve_optional_boot_info_v2, resolve_verification_info,
-        run_lower_el_bootstrap_svc_dry_run,
     };
     use crate::bootinfo::{BootSource, FramebufferFormat, NovaBootstrapFrameArenaDescriptorV1};
     use crate::console::ConsoleSink;
+    use crate::diag::run_lower_el_bootstrap_svc_dry_run;
     use crate::syscall::{
         BootstrapTaskState, CurrentTaskState, SyscallDispatchState, install_bootstrap_syscall_state,
     };

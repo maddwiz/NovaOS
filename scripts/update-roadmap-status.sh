@@ -77,7 +77,7 @@ Report links below point to local runtime artifacts; run \`make report\` if they
 
 ## Active Phase
 
-- active_phase: M0 runtime spine with Spark boot continuity
+- active_phase: M0 portability refactor + runtime spine with Spark boot continuity
 - repo_root: ${ROOT_DIR}
 - latest_report_generated_at_utc: ${report_generated_at}
 - latest_loop_timestamp_utc: ${loop_timestamp}
@@ -91,8 +91,9 @@ Report links below point to local runtime artifacts; run \`make report\` if they
 - \`nova_rt\` now carries a Rust mirror of the \`BootInfo v2\` draft alongside the live v1 handoff
 - \`services/acceld\` now has backend traits with CPU, GB10, RTX, and Hopper placeholder backends
 - \`services/memd\` now has topology-profile traits with UMA, discrete, NVLink, and MIG placeholders
-- \`services/policyd\`, \`services/agentd\`, \`services/intentd\`, \`services/scened\`, \`services/appbridged\`, and \`services/shelld\` now exist as first runtime-spine service crates backed by shared \`nova_rt\` service, policy, agent, intent, scene, and app bridge contracts
+- \`services/policyd\`, \`services/agentd\`, \`services/intentd\`, \`services/scened\`, \`services/appbridged\`, and \`services/shelld\` now exist as additive runtime-spine service crates backed by shared \`nova_rt\` service, policy, agent, intent, scene, and app bridge contracts
 - \`kernel/arch/x86_64\` and \`drivers/bus/pci\` exist as early portability lanes
+- \`kernel/arch/arm64/src/lib.rs\` is being reduced into focused modules; boot-contract parsing, EL transfer helpers, and diagnostic probes now live outside the root orchestrator
 - \`kernel/arch/arm64\` now carries validated raw bringup state into the shared runtime and emits early boot-console output over QEMU trace plus framebuffer when present
 - \`abi/syscall/nova_syscall_v1.h\` and \`nova_rt\` now define the first typed syscall ABI draft, and \`kernel/arch/arm64\` now carries the Arm64 \`svc\` scaffold dispatcher, bound to a concrete current bootstrap task and bounded by bootstrap endpoint/shared-memory quotas, with the installed bootstrap runtime now marking the first reserved bootstrap endpoint and shared-memory lanes ready when the capsule grants them and those lanes returning real kernel-owned results in the QEMU probe
 - \`boot/mkimage\` now pads kernel payload images to an alignment-safe \`load_offset\`, so stage1's existing in-place \`load_base\` contract lands the live Arm64 kernel body on a vector-safe address, and the kernel also retains a runtime-aligned exception-vector fallback for narrower diagnostics

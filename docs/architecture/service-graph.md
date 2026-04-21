@@ -2,6 +2,8 @@
 
 NovaOS keeps the kernel mechanism-only. Policy, agents, intent routing, scenes, app bridging, memory policy, and accelerator policy live above the kernel as services.
 
+This service graph is an additive runtime layer inside the existing M0-M17 roadmap. It does not replace the Spark/QEMU boot-continuity and portability milestones.
+
 ## Layers
 
 - Kernel mechanisms: task, capability, endpoint, shared-memory, event/logging, and scheduling primitives.

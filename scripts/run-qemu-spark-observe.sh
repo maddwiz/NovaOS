@@ -27,7 +27,9 @@ if [ -z "${FIRMWARE_PATH}" ]; then
   for candidate in \
     /home/linuxbrew/.linuxbrew/share/qemu/edk2-aarch64-code.fd \
     /home/linuxbrew/.linuxbrew/Cellar/qemu/10.2.2/share/qemu/edk2-aarch64-code.fd \
-    /usr/share/qemu-efi-aarch64/QEMU_EFI.fd
+    /usr/share/AAVMF/AAVMF_CODE.fd \
+    /usr/share/qemu-efi-aarch64/QEMU_EFI.fd \
+    /usr/share/edk2/aarch64/QEMU_EFI.fd
   do
     if [ -f "${candidate}" ]; then
       FIRMWARE_PATH="${candidate}"
@@ -43,8 +45,13 @@ fi
 
 if [ -z "${FIRMWARE_VARS_PATH}" ]; then
   for candidate in \
+    /usr/share/AAVMF/AAVMF_VARS.fd \
+    /usr/share/qemu-efi-aarch64/QEMU_VARS.fd \
+    /usr/share/qemu-efi-aarch64/QEMU_EFI_VARS.fd \
+    /usr/share/edk2/aarch64/QEMU_VARS.fd \
     /home/linuxbrew/.linuxbrew/Cellar/qemu/10.2.2/share/qemu/edk2-arm-vars.fd \
-    /home/linuxbrew/.linuxbrew/share/qemu/edk2-arm-vars.fd
+    /home/linuxbrew/.linuxbrew/share/qemu/edk2-arm-vars.fd \
+    /usr/share/OVMF/OVMF_VARS.fd
   do
     if [ -f "${candidate}" ]; then
       FIRMWARE_VARS_PATH="${candidate}"

@@ -81,8 +81,13 @@ fi
 
 vars_found=0
 for candidate in \
+  /usr/share/AAVMF/AAVMF_VARS.fd \
+  /usr/share/qemu-efi-aarch64/QEMU_VARS.fd \
+  /usr/share/qemu-efi-aarch64/QEMU_EFI_VARS.fd \
+  /usr/share/edk2/aarch64/QEMU_VARS.fd \
   /home/linuxbrew/.linuxbrew/Cellar/qemu/10.2.2/share/qemu/edk2-arm-vars.fd \
-  /home/linuxbrew/.linuxbrew/share/qemu/edk2-arm-vars.fd
+  /home/linuxbrew/.linuxbrew/share/qemu/edk2-arm-vars.fd \
+  /usr/share/OVMF/OVMF_VARS.fd
 do
   if [ -f "$candidate" ]; then
     report_line "uefi_vars=${candidate}"

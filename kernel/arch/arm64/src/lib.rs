@@ -957,13 +957,20 @@ fn log_bootstrap_el0_boundary_plan<C: ConsoleSink>(
         if page_table_plan.ready() && population.ready() {
             let construction = unsafe { construct_live_bootstrap_el0_page_tables(page_table_plan) };
             console.write_line(construction.readiness.label());
+            console.write_str("[info] bootstrap el0 mmu registers prepared ");
+            let registers = page_table_plan.mmu_register_plan(construction);
+            console.write_line(registers.readiness.label());
         } else {
             console.write_line("backing-frames-not-populated");
+            console.write_line(
+                "[info] bootstrap el0 mmu registers prepared page-tables-not-constructed",
+            );
         }
     } else {
         console.write_line("backing-frames-not-ready");
         console.write_line("[info] bootstrap el0 backing frames populated page-tables-not-ready");
         console.write_line("[info] bootstrap el0 page tables constructed page-tables-not-ready");
+        console.write_line("[info] bootstrap el0 mmu registers prepared page-tables-not-ready");
     }
 }
 

@@ -15,6 +15,21 @@ pub const BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES: u64 =
     BOOTSTRAP_EL0_TRANSLATION_TABLE_COUNT * PAGE_SIZE;
 const BOOTSTRAP_EL0_TRANSLATION_TABLE_ENTRIES: usize =
     (BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES / ARM64_TABLE_ENTRY_SIZE) as usize;
+const BOOTSTRAP_EL0_MAIR_EL1: u64 = 0x04ff;
+const BOOTSTRAP_EL0_TCR_EL1: u64 = TCR_T0SZ_48_BIT
+    | TCR_T1SZ_48_BIT
+    | TCR_IRGN0_WRITE_BACK_WRITE_ALLOCATE
+    | TCR_ORGN0_WRITE_BACK_WRITE_ALLOCATE
+    | TCR_SH0_INNER_SHAREABLE
+    | TCR_EPD1_DISABLE
+    | TCR_IPS_48_BIT;
+const TCR_T0SZ_48_BIT: u64 = 16;
+const TCR_IRGN0_WRITE_BACK_WRITE_ALLOCATE: u64 = 0b01 << 8;
+const TCR_ORGN0_WRITE_BACK_WRITE_ALLOCATE: u64 = 0b01 << 10;
+const TCR_SH0_INNER_SHAREABLE: u64 = 0b11 << 12;
+const TCR_T1SZ_48_BIT: u64 = 16 << 16;
+const TCR_EPD1_DISABLE: u64 = 1 << 23;
+const TCR_IPS_48_BIT: u64 = 0b101 << 32;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PageTablePlan {
@@ -572,6 +587,13 @@ impl BootstrapEl0PageTablePlan {
     pub const fn ready(self) -> bool {
         matches!(self.readiness, BootstrapEl0PageTableReadiness::Ready)
     }
+
+    pub fn mmu_register_plan(
+        self,
+        construction: BootstrapEl0PageTableConstruction,
+    ) -> BootstrapEl0MmuRegisterPlan {
+        BootstrapEl0MmuRegisterPlan::from_page_table_plan(self, construction)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -770,6 +792,91 @@ pub fn construct_bootstrap_el0_page_tables(
     construction.mapped_pages =
         kernel_pages + user_image_pages + user_context_pages + user_stack_pages;
     construction
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BootstrapEl0MmuRegisterPlan {
+    pub readiness: BootstrapEl0MmuRegisterReadiness,
+    pub source_readiness: BootstrapEl0PageTableConstructionReadiness,
+    pub ttbr0_el1: u64,
+    pub ttbr1_el1: u64,
+    pub tcr_el1: u64,
+    pub mair_el1: u64,
+    pub sctlr_el1_enable_mask: u64,
+}
+
+impl BootstrapEl0MmuRegisterPlan {
+    fn from_page_table_plan(
+        page_tables: BootstrapEl0PageTablePlan,
+        construction: BootstrapEl0PageTableConstruction,
+    ) -> Self {
+        let mut plan = Self {
+            readiness: BootstrapEl0MmuRegisterReadiness::Ready,
+            source_readiness: construction.readiness,
+            ttbr0_el1: construction.root_table_phys_base,
+            ttbr1_el1: 0,
+            tcr_el1: BOOTSTRAP_EL0_TCR_EL1,
+            mair_el1: BOOTSTRAP_EL0_MAIR_EL1,
+            sctlr_el1_enable_mask: 0,
+        };
+
+        if !page_tables.ready() {
+            plan.readiness = BootstrapEl0MmuRegisterReadiness::PageTablePlanNotReady;
+            return plan;
+        }
+
+        if !construction.ready() {
+            plan.readiness = BootstrapEl0MmuRegisterReadiness::PageTablesNotConstructed;
+            return plan;
+        }
+
+        if construction.source_readiness != page_tables.readiness
+            || construction.root_table_phys_base != page_tables.root_table_phys_base
+            || construction.page_table_bytes != page_tables.page_table_bytes
+        {
+            plan.readiness = BootstrapEl0MmuRegisterReadiness::MismatchedPageTableConstruction;
+            return plan;
+        }
+
+        if construction.root_table_phys_base == 0 {
+            plan.readiness = BootstrapEl0MmuRegisterReadiness::MissingRootTable;
+            return plan;
+        }
+
+        if !is_page_aligned(construction.root_table_phys_base) {
+            plan.readiness = BootstrapEl0MmuRegisterReadiness::UnalignedRootTable;
+            return plan;
+        }
+
+        plan
+    }
+
+    pub const fn ready(self) -> bool {
+        matches!(self.readiness, BootstrapEl0MmuRegisterReadiness::Ready)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BootstrapEl0MmuRegisterReadiness {
+    Ready,
+    PageTablePlanNotReady,
+    PageTablesNotConstructed,
+    MismatchedPageTableConstruction,
+    MissingRootTable,
+    UnalignedRootTable,
+}
+
+impl BootstrapEl0MmuRegisterReadiness {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::PageTablePlanNotReady => "page-table-plan-not-ready",
+            Self::PageTablesNotConstructed => "page-tables-not-constructed",
+            Self::MismatchedPageTableConstruction => "mismatched-page-table-construction",
+            Self::MissingRootTable => "missing-root-table",
+            Self::UnalignedRootTable => "unaligned-root-table",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1193,15 +1300,19 @@ const fn u64_to_usize(value: u64) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Arm64AccessPerm, Arm64MemoryAttr, BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES,
-        BOOTSTRAP_EL0_TRANSLATION_TABLE_ENTRIES, BootstrapEl0BackingFramePopulationReadiness,
-        BootstrapEl0MappingReadiness, BootstrapEl0MappingRequest,
+        Arm64AccessPerm, Arm64MemoryAttr, BOOTSTRAP_EL0_MAIR_EL1, BOOTSTRAP_EL0_TCR_EL1,
+        BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES, BOOTSTRAP_EL0_TRANSLATION_TABLE_ENTRIES,
+        BootstrapEl0BackingFramePopulationReadiness, BootstrapEl0MappingReadiness,
+        BootstrapEl0MappingRequest, BootstrapEl0MmuRegisterReadiness,
         BootstrapEl0PageTableConstructionReadiness, BootstrapEl0PageTableReadiness,
         BootstrapEl0PageTableRequest, DESCRIPTOR_NG, DESCRIPTOR_PXN, DESCRIPTOR_UXN,
         KERNEL_L2_TABLE_INDEX, L1_TABLE_INDEX, PAGE_SIZE, PageTablePlan, ROOT_TABLE_INDEX,
-        USER_L2_TABLE_INDEX, USER_L3_TABLE_INDEX, construct_bootstrap_el0_page_tables, l0_index,
-        l1_index, l2_index, l3_index, page_descriptor, populate_bootstrap_el0_backing_frames,
-        table_descriptor, table_entry_offset,
+        TCR_EPD1_DISABLE, TCR_IPS_48_BIT, TCR_IRGN0_WRITE_BACK_WRITE_ALLOCATE,
+        TCR_ORGN0_WRITE_BACK_WRITE_ALLOCATE, TCR_SH0_INNER_SHAREABLE, TCR_T0SZ_48_BIT,
+        TCR_T1SZ_48_BIT, USER_L2_TABLE_INDEX, USER_L3_TABLE_INDEX,
+        construct_bootstrap_el0_page_tables, l0_index, l1_index, l2_index, l3_index,
+        page_descriptor, populate_bootstrap_el0_backing_frames, table_descriptor,
+        table_entry_offset,
     };
     use crate::bootinfo::{NovaBootInfoV1, NovaBootInfoV2, NovaBootstrapUserWindowDescriptorV1};
 
@@ -1545,6 +1656,74 @@ mod tests {
         assert_eq!(
             construction.source_readiness,
             BootstrapEl0PageTableReadiness::Ready
+        );
+    }
+
+    #[test]
+    fn bootstrap_el0_mmu_register_plan_prepares_translation_base_without_mmu_enable() {
+        let plan = ready_bootstrap_el0_page_table_plan();
+        let mut entries = [0; BOOTSTRAP_EL0_TRANSLATION_TABLE_ENTRIES];
+        let construction = construct_bootstrap_el0_page_tables(plan, &mut entries);
+
+        let registers = plan.mmu_register_plan(construction);
+
+        assert!(registers.ready());
+        assert_eq!(registers.readiness, BootstrapEl0MmuRegisterReadiness::Ready);
+        assert_eq!(
+            registers.source_readiness,
+            BootstrapEl0PageTableConstructionReadiness::Ready
+        );
+        assert_eq!(registers.ttbr0_el1, plan.root_table_phys_base);
+        assert_eq!(registers.ttbr1_el1, 0);
+        assert_eq!(registers.mair_el1, BOOTSTRAP_EL0_MAIR_EL1);
+        assert_eq!(registers.mair_el1 & 0xff, 0xff);
+        assert_eq!((registers.mair_el1 >> 8) & 0xff, 0x04);
+        assert_eq!(registers.tcr_el1, BOOTSTRAP_EL0_TCR_EL1);
+        assert_ne!(registers.tcr_el1 & TCR_T0SZ_48_BIT, 0);
+        assert_ne!(registers.tcr_el1 & TCR_IRGN0_WRITE_BACK_WRITE_ALLOCATE, 0);
+        assert_ne!(registers.tcr_el1 & TCR_ORGN0_WRITE_BACK_WRITE_ALLOCATE, 0);
+        assert_ne!(registers.tcr_el1 & TCR_SH0_INNER_SHAREABLE, 0);
+        assert_ne!(registers.tcr_el1 & TCR_T1SZ_48_BIT, 0);
+        assert_ne!(registers.tcr_el1 & TCR_EPD1_DISABLE, 0);
+        assert_ne!(registers.tcr_el1 & TCR_IPS_48_BIT, 0);
+        assert_eq!(registers.sctlr_el1_enable_mask, 0);
+    }
+
+    #[test]
+    fn bootstrap_el0_mmu_register_plan_rejects_unconstructed_tables() {
+        let plan = ready_bootstrap_el0_page_table_plan();
+        let construction = super::BootstrapEl0PageTableConstruction {
+            readiness: BootstrapEl0PageTableConstructionReadiness::OutputBufferTooSmall,
+            source_readiness: BootstrapEl0PageTableReadiness::Ready,
+            root_table_phys_base: plan.root_table_phys_base,
+            page_table_bytes: plan.page_table_bytes,
+            mapped_pages: 0,
+        };
+
+        let registers = plan.mmu_register_plan(construction);
+
+        assert_eq!(
+            registers.readiness,
+            BootstrapEl0MmuRegisterReadiness::PageTablesNotConstructed
+        );
+    }
+
+    #[test]
+    fn bootstrap_el0_mmu_register_plan_rejects_mismatched_construction() {
+        let plan = ready_bootstrap_el0_page_table_plan();
+        let construction = super::BootstrapEl0PageTableConstruction {
+            readiness: BootstrapEl0PageTableConstructionReadiness::Ready,
+            source_readiness: BootstrapEl0PageTableReadiness::Ready,
+            root_table_phys_base: plan.root_table_phys_base + PAGE_SIZE,
+            page_table_bytes: plan.page_table_bytes,
+            mapped_pages: 16,
+        };
+
+        let registers = plan.mmu_register_plan(construction);
+
+        assert_eq!(
+            registers.readiness,
+            BootstrapEl0MmuRegisterReadiness::MismatchedPageTableConstruction
         );
     }
 

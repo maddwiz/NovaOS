@@ -2,6 +2,19 @@ use crate::bootinfo::{NovaBootInfoV1, NovaBootInfoV2};
 
 pub const PAGE_SIZE: u64 = 4096;
 const PAGE_MASK: u64 = PAGE_SIZE - 1;
+const ARM64_TABLE_ENTRY_COUNT: usize = 512;
+const ARM64_TABLE_ENTRY_SIZE: u64 = 8;
+const ROOT_TABLE_INDEX: usize = 0;
+const L1_TABLE_INDEX: usize = 1;
+const KERNEL_L2_TABLE_INDEX: usize = 2;
+const KERNEL_L3_TABLE_INDEX: usize = 3;
+const USER_L2_TABLE_INDEX: usize = 4;
+const USER_L3_TABLE_INDEX: usize = 5;
+pub const BOOTSTRAP_EL0_TRANSLATION_TABLE_COUNT: u64 = 6;
+pub const BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES: u64 =
+    BOOTSTRAP_EL0_TRANSLATION_TABLE_COUNT * PAGE_SIZE;
+const BOOTSTRAP_EL0_TRANSLATION_TABLE_ENTRIES: usize =
+    (BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES / ARM64_TABLE_ENTRY_SIZE) as usize;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PageTablePlan {
@@ -359,6 +372,8 @@ pub struct BootstrapEl0PageTableRequest {
     pub user_image_phys_base: u64,
     pub user_context_phys_base: u64,
     pub user_stack_phys_base: u64,
+    pub page_table_phys_base: u64,
+    pub page_table_size: u64,
 }
 
 impl BootstrapEl0PageTableRequest {
@@ -368,6 +383,8 @@ impl BootstrapEl0PageTableRequest {
         user_image_phys_base: u64,
         user_context_phys_base: u64,
         user_stack_phys_base: u64,
+        page_table_phys_base: u64,
+        page_table_size: u64,
     ) -> Self {
         Self {
             kernel_base,
@@ -375,6 +392,8 @@ impl BootstrapEl0PageTableRequest {
             user_image_phys_base,
             user_context_phys_base,
             user_stack_phys_base,
+            page_table_phys_base,
+            page_table_size,
         }
     }
 }
@@ -389,6 +408,15 @@ pub struct BootstrapEl0PageTablePlan {
     pub user_image_mapping: Arm64PageMapping,
     pub user_context_mapping: Arm64PageMapping,
     pub user_stack_mapping: Arm64PageMapping,
+    pub page_table_phys_base: u64,
+    pub page_table_size: u64,
+    pub page_table_bytes: u64,
+    pub root_table_phys_base: u64,
+    pub l1_table_phys_base: u64,
+    pub kernel_l2_table_phys_base: u64,
+    pub kernel_l3_table_phys_base: u64,
+    pub user_l2_table_phys_base: u64,
+    pub user_l3_table_phys_base: u64,
 }
 
 impl BootstrapEl0PageTablePlan {
@@ -405,6 +433,15 @@ impl BootstrapEl0PageTablePlan {
             user_image_mapping: Arm64PageMapping::empty(),
             user_context_mapping: Arm64PageMapping::empty(),
             user_stack_mapping: Arm64PageMapping::empty(),
+            page_table_phys_base: request.page_table_phys_base,
+            page_table_size: request.page_table_size,
+            page_table_bytes: 0,
+            root_table_phys_base: 0,
+            l1_table_phys_base: 0,
+            kernel_l2_table_phys_base: 0,
+            kernel_l3_table_phys_base: 0,
+            user_l2_table_phys_base: 0,
+            user_l3_table_phys_base: 0,
         };
 
         if !mapping.ready() {
@@ -473,6 +510,56 @@ impl BootstrapEl0PageTablePlan {
             return plan;
         }
 
+        if request.page_table_phys_base == 0 || request.page_table_size == 0 {
+            plan.readiness = BootstrapEl0PageTableReadiness::MissingPageTableArena;
+            return plan;
+        }
+
+        if !is_page_aligned(request.page_table_phys_base)
+            || !is_page_aligned(request.page_table_size)
+        {
+            plan.readiness = BootstrapEl0PageTableReadiness::UnalignedPageTableArena;
+            return plan;
+        }
+
+        let Some(page_table_arena_end) = request
+            .page_table_phys_base
+            .checked_add(request.page_table_size)
+        else {
+            plan.readiness = BootstrapEl0PageTableReadiness::MappingAddressOverflow;
+            return plan;
+        };
+
+        let Some(page_table_end) = request
+            .page_table_phys_base
+            .checked_add(BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES)
+        else {
+            plan.readiness = BootstrapEl0PageTableReadiness::MappingAddressOverflow;
+            return plan;
+        };
+
+        if page_table_end > page_table_arena_end {
+            plan.readiness = BootstrapEl0PageTableReadiness::PageTableArenaTooSmall;
+            return plan;
+        }
+
+        if BootstrapEl0TranslationTableLayout::from_plan(plan).is_none() {
+            plan.readiness = BootstrapEl0PageTableReadiness::UnsupportedVirtualAddressLayout;
+            return plan;
+        }
+
+        plan.page_table_bytes = BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES;
+        plan.root_table_phys_base = request.page_table_phys_base;
+        plan.l1_table_phys_base = table_phys_base(request.page_table_phys_base, L1_TABLE_INDEX);
+        plan.kernel_l2_table_phys_base =
+            table_phys_base(request.page_table_phys_base, KERNEL_L2_TABLE_INDEX);
+        plan.kernel_l3_table_phys_base =
+            table_phys_base(request.page_table_phys_base, KERNEL_L3_TABLE_INDEX);
+        plan.user_l2_table_phys_base =
+            table_phys_base(request.page_table_phys_base, USER_L2_TABLE_INDEX);
+        plan.user_l3_table_phys_base =
+            table_phys_base(request.page_table_phys_base, USER_L3_TABLE_INDEX);
+
         plan
     }
 
@@ -486,7 +573,11 @@ pub enum BootstrapEl0PageTableReadiness {
     Ready,
     MappingPlanNotReady,
     MissingKernelMapping,
+    MissingPageTableArena,
     UnalignedMapping,
+    UnalignedPageTableArena,
+    PageTableArenaTooSmall,
+    UnsupportedVirtualAddressLayout,
     MappingAddressOverflow,
 }
 
@@ -496,11 +587,402 @@ impl BootstrapEl0PageTableReadiness {
             Self::Ready => "ready",
             Self::MappingPlanNotReady => "mapping-plan-not-ready",
             Self::MissingKernelMapping => "missing-kernel-mapping",
+            Self::MissingPageTableArena => "missing-page-table-arena",
             Self::UnalignedMapping => "unaligned-mapping",
+            Self::UnalignedPageTableArena => "unaligned-page-table-arena",
+            Self::PageTableArenaTooSmall => "page-table-arena-too-small",
+            Self::UnsupportedVirtualAddressLayout => "unsupported-virtual-address-layout",
             Self::MappingAddressOverflow => "mapping-address-overflow",
         }
     }
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BootstrapEl0PageTableConstruction {
+    pub readiness: BootstrapEl0PageTableConstructionReadiness,
+    pub source_readiness: BootstrapEl0PageTableReadiness,
+    pub root_table_phys_base: u64,
+    pub page_table_bytes: u64,
+    pub mapped_pages: u64,
+}
+
+impl BootstrapEl0PageTableConstruction {
+    const fn from_plan(
+        plan: BootstrapEl0PageTablePlan,
+        readiness: BootstrapEl0PageTableConstructionReadiness,
+    ) -> Self {
+        Self {
+            readiness,
+            source_readiness: plan.readiness,
+            root_table_phys_base: plan.root_table_phys_base,
+            page_table_bytes: plan.page_table_bytes,
+            mapped_pages: 0,
+        }
+    }
+
+    pub const fn ready(self) -> bool {
+        matches!(
+            self.readiness,
+            BootstrapEl0PageTableConstructionReadiness::Ready
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BootstrapEl0PageTableConstructionReadiness {
+    Ready,
+    PageTablePlanNotReady,
+    OutputBufferTooSmall,
+    UnsupportedVirtualAddressLayout,
+    MappingAddressOverflow,
+}
+
+impl BootstrapEl0PageTableConstructionReadiness {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::PageTablePlanNotReady => "page-table-plan-not-ready",
+            Self::OutputBufferTooSmall => "output-buffer-too-small",
+            Self::UnsupportedVirtualAddressLayout => "unsupported-virtual-address-layout",
+            Self::MappingAddressOverflow => "mapping-address-overflow",
+        }
+    }
+}
+
+pub fn construct_bootstrap_el0_page_tables(
+    plan: BootstrapEl0PageTablePlan,
+    entries: &mut [u64],
+) -> BootstrapEl0PageTableConstruction {
+    if !plan.ready() {
+        return BootstrapEl0PageTableConstruction::from_plan(
+            plan,
+            BootstrapEl0PageTableConstructionReadiness::PageTablePlanNotReady,
+        );
+    }
+
+    if entries.len() < BOOTSTRAP_EL0_TRANSLATION_TABLE_ENTRIES {
+        return BootstrapEl0PageTableConstruction::from_plan(
+            plan,
+            BootstrapEl0PageTableConstructionReadiness::OutputBufferTooSmall,
+        );
+    }
+
+    let Some(layout) = BootstrapEl0TranslationTableLayout::from_plan(plan) else {
+        return BootstrapEl0PageTableConstruction::from_plan(
+            plan,
+            BootstrapEl0PageTableConstructionReadiness::UnsupportedVirtualAddressLayout,
+        );
+    };
+
+    for entry in entries
+        .iter_mut()
+        .take(BOOTSTRAP_EL0_TRANSLATION_TABLE_ENTRIES)
+    {
+        *entry = 0;
+    }
+
+    write_table_entry(
+        entries,
+        ROOT_TABLE_INDEX,
+        layout.l0_index,
+        table_descriptor(plan.l1_table_phys_base),
+    );
+    write_table_entry(
+        entries,
+        L1_TABLE_INDEX,
+        layout.kernel_l1_index,
+        table_descriptor(plan.kernel_l2_table_phys_base),
+    );
+    write_table_entry(
+        entries,
+        L1_TABLE_INDEX,
+        layout.user_l1_index,
+        table_descriptor(plan.user_l2_table_phys_base),
+    );
+    write_table_entry(
+        entries,
+        KERNEL_L2_TABLE_INDEX,
+        layout.kernel_l2_index,
+        table_descriptor(plan.kernel_l3_table_phys_base),
+    );
+    write_table_entry(
+        entries,
+        USER_L2_TABLE_INDEX,
+        layout.user_l2_index,
+        table_descriptor(plan.user_l3_table_phys_base),
+    );
+
+    let Some(kernel_pages) = write_page_mapping(
+        entries,
+        KERNEL_L3_TABLE_INDEX,
+        plan.kernel_mapping,
+        layout.kernel_l3_start,
+    ) else {
+        return BootstrapEl0PageTableConstruction::from_plan(
+            plan,
+            BootstrapEl0PageTableConstructionReadiness::MappingAddressOverflow,
+        );
+    };
+    let Some(user_image_pages) = write_page_mapping(
+        entries,
+        USER_L3_TABLE_INDEX,
+        plan.user_image_mapping,
+        layout.user_image_l3_start,
+    ) else {
+        return BootstrapEl0PageTableConstruction::from_plan(
+            plan,
+            BootstrapEl0PageTableConstructionReadiness::MappingAddressOverflow,
+        );
+    };
+    let Some(user_context_pages) = write_page_mapping(
+        entries,
+        USER_L3_TABLE_INDEX,
+        plan.user_context_mapping,
+        layout.user_context_l3_start,
+    ) else {
+        return BootstrapEl0PageTableConstruction::from_plan(
+            plan,
+            BootstrapEl0PageTableConstructionReadiness::MappingAddressOverflow,
+        );
+    };
+    let Some(user_stack_pages) = write_page_mapping(
+        entries,
+        USER_L3_TABLE_INDEX,
+        plan.user_stack_mapping,
+        layout.user_stack_l3_start,
+    ) else {
+        return BootstrapEl0PageTableConstruction::from_plan(
+            plan,
+            BootstrapEl0PageTableConstructionReadiness::MappingAddressOverflow,
+        );
+    };
+
+    let mut construction = BootstrapEl0PageTableConstruction::from_plan(
+        plan,
+        BootstrapEl0PageTableConstructionReadiness::Ready,
+    );
+    construction.mapped_pages =
+        kernel_pages + user_image_pages + user_context_pages + user_stack_pages;
+    construction
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct BootstrapEl0TranslationTableLayout {
+    l0_index: usize,
+    kernel_l1_index: usize,
+    kernel_l2_index: usize,
+    kernel_l3_start: usize,
+    user_l1_index: usize,
+    user_l2_index: usize,
+    user_image_l3_start: usize,
+    user_context_l3_start: usize,
+    user_stack_l3_start: usize,
+}
+
+impl BootstrapEl0TranslationTableLayout {
+    fn from_plan(plan: BootstrapEl0PageTablePlan) -> Option<Self> {
+        let kernel = MappingSpan::from_mapping(plan.kernel_mapping)?;
+        let user_image = MappingSpan::from_mapping(plan.user_image_mapping)?;
+        let user_context = MappingSpan::from_mapping(plan.user_context_mapping)?;
+        let user_stack = MappingSpan::from_mapping(plan.user_stack_mapping)?;
+
+        if kernel.l0_index != user_image.l0_index
+            || user_image.l0_index != user_context.l0_index
+            || user_context.l0_index != user_stack.l0_index
+        {
+            return None;
+        }
+
+        if user_image.l1_index != user_context.l1_index
+            || user_context.l1_index != user_stack.l1_index
+            || user_image.l2_index != user_context.l2_index
+            || user_context.l2_index != user_stack.l2_index
+        {
+            return None;
+        }
+
+        if kernel.l1_index == user_image.l1_index {
+            return None;
+        }
+
+        Some(Self {
+            l0_index: kernel.l0_index,
+            kernel_l1_index: kernel.l1_index,
+            kernel_l2_index: kernel.l2_index,
+            kernel_l3_start: kernel.l3_start,
+            user_l1_index: user_image.l1_index,
+            user_l2_index: user_image.l2_index,
+            user_image_l3_start: user_image.l3_start,
+            user_context_l3_start: user_context.l3_start,
+            user_stack_l3_start: user_stack.l3_start,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct MappingSpan {
+    l0_index: usize,
+    l1_index: usize,
+    l2_index: usize,
+    l3_start: usize,
+    page_count: u64,
+}
+
+impl MappingSpan {
+    fn from_mapping(mapping: Arm64PageMapping) -> Option<Self> {
+        if !mapping.is_page_aligned() || mapping.size == 0 {
+            return None;
+        }
+
+        let end = mapping
+            .virt_base
+            .checked_add(mapping.size)?
+            .checked_sub(1)?;
+        if l0_index(mapping.virt_base) != l0_index(end)
+            || l1_index(mapping.virt_base) != l1_index(end)
+            || l2_index(mapping.virt_base) != l2_index(end)
+        {
+            return None;
+        }
+
+        let l3_start = l3_index(mapping.virt_base);
+        let page_count = mapping.size / PAGE_SIZE;
+        if l3_start as u64 + page_count > ARM64_TABLE_ENTRY_COUNT as u64 {
+            return None;
+        }
+
+        Some(Self {
+            l0_index: l0_index(mapping.virt_base),
+            l1_index: l1_index(mapping.virt_base),
+            l2_index: l2_index(mapping.virt_base),
+            l3_start,
+            page_count,
+        })
+    }
+}
+
+fn write_page_mapping(
+    entries: &mut [u64],
+    table_index: usize,
+    mapping: Arm64PageMapping,
+    l3_start: usize,
+) -> Option<u64> {
+    let span = MappingSpan::from_mapping(mapping)?;
+    let mut mapped_pages = 0;
+    while mapped_pages < span.page_count {
+        let phys_base = mapping
+            .phys_base
+            .checked_add(mapped_pages.checked_mul(PAGE_SIZE)?)?;
+        write_table_entry(
+            entries,
+            table_index,
+            l3_start + mapped_pages as usize,
+            page_descriptor(mapping, phys_base),
+        );
+        mapped_pages += 1;
+    }
+    Some(mapped_pages)
+}
+
+fn write_table_entry(entries: &mut [u64], table_index: usize, entry_index: usize, value: u64) {
+    entries[table_entry_offset(table_index, entry_index)] = value;
+}
+
+const fn table_entry_offset(table_index: usize, entry_index: usize) -> usize {
+    table_index * ARM64_TABLE_ENTRY_COUNT + entry_index
+}
+
+const fn table_phys_base(page_table_phys_base: u64, table_index: usize) -> u64 {
+    page_table_phys_base + (table_index as u64 * PAGE_SIZE)
+}
+
+const fn l0_index(virt_base: u64) -> usize {
+    ((virt_base >> 39) & 0x1ff) as usize
+}
+
+const fn l1_index(virt_base: u64) -> usize {
+    ((virt_base >> 30) & 0x1ff) as usize
+}
+
+const fn l2_index(virt_base: u64) -> usize {
+    ((virt_base >> 21) & 0x1ff) as usize
+}
+
+const fn l3_index(virt_base: u64) -> usize {
+    ((virt_base >> 12) & 0x1ff) as usize
+}
+
+const fn table_descriptor(table_phys_base: u64) -> u64 {
+    (table_phys_base & DESCRIPTOR_OUTPUT_ADDRESS_MASK) | DESCRIPTOR_VALID | DESCRIPTOR_TABLE
+}
+
+const fn page_descriptor(mapping: Arm64PageMapping, phys_base: u64) -> u64 {
+    (phys_base & DESCRIPTOR_OUTPUT_ADDRESS_MASK)
+        | DESCRIPTOR_VALID
+        | DESCRIPTOR_TABLE
+        | (memory_attr_index(mapping.attr) << 2)
+        | (access_perm_bits(mapping.access) << 6)
+        | shareability_bits(mapping.attr)
+        | DESCRIPTOR_AF
+        | non_global_bit(mapping.access)
+        | privileged_execute_never_bit(mapping)
+        | user_execute_never_bit(mapping)
+}
+
+const fn memory_attr_index(attr: Arm64MemoryAttr) -> u64 {
+    match attr {
+        Arm64MemoryAttr::NormalCached => 0,
+        Arm64MemoryAttr::DeviceNgNre => 1,
+    }
+}
+
+const fn access_perm_bits(access: Arm64AccessPerm) -> u64 {
+    match access {
+        Arm64AccessPerm::KernelReadWrite => 0b00,
+        Arm64AccessPerm::UserReadWrite => 0b01,
+        Arm64AccessPerm::UserReadOnly | Arm64AccessPerm::UserReadExecute => 0b11,
+    }
+}
+
+const fn shareability_bits(attr: Arm64MemoryAttr) -> u64 {
+    match attr {
+        Arm64MemoryAttr::NormalCached => 0b11 << 8,
+        Arm64MemoryAttr::DeviceNgNre => 0b10 << 8,
+    }
+}
+
+const fn non_global_bit(access: Arm64AccessPerm) -> u64 {
+    match access {
+        Arm64AccessPerm::KernelReadWrite => 0,
+        Arm64AccessPerm::UserReadOnly
+        | Arm64AccessPerm::UserReadWrite
+        | Arm64AccessPerm::UserReadExecute => DESCRIPTOR_NG,
+    }
+}
+
+const fn privileged_execute_never_bit(mapping: Arm64PageMapping) -> u64 {
+    match mapping.access {
+        Arm64AccessPerm::UserReadExecute => DESCRIPTOR_PXN,
+        _ if mapping.execute_never => DESCRIPTOR_PXN,
+        _ => 0,
+    }
+}
+
+const fn user_execute_never_bit(mapping: Arm64PageMapping) -> u64 {
+    if mapping.execute_never {
+        DESCRIPTOR_UXN
+    } else {
+        0
+    }
+}
+
+const DESCRIPTOR_VALID: u64 = 1 << 0;
+const DESCRIPTOR_TABLE: u64 = 1 << 1;
+const DESCRIPTOR_AF: u64 = 1 << 10;
+const DESCRIPTOR_NG: u64 = 1 << 11;
+const DESCRIPTOR_PXN: u64 = 1 << 53;
+const DESCRIPTOR_UXN: u64 = 1 << 54;
+const DESCRIPTOR_OUTPUT_ADDRESS_MASK: u64 = 0x0000_FFFF_FFFF_F000;
 
 const fn is_page_aligned(value: u64) -> bool {
     (value & PAGE_MASK) == 0
@@ -537,8 +1019,14 @@ fn mapping_end(mapping: Arm64PageMapping) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Arm64AccessPerm, Arm64MemoryAttr, BootstrapEl0MappingReadiness, BootstrapEl0MappingRequest,
-        BootstrapEl0PageTableReadiness, BootstrapEl0PageTableRequest, PAGE_SIZE, PageTablePlan,
+        Arm64AccessPerm, Arm64MemoryAttr, BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES,
+        BOOTSTRAP_EL0_TRANSLATION_TABLE_ENTRIES, BootstrapEl0MappingReadiness,
+        BootstrapEl0MappingRequest, BootstrapEl0PageTableConstructionReadiness,
+        BootstrapEl0PageTableReadiness, BootstrapEl0PageTableRequest, DESCRIPTOR_NG,
+        DESCRIPTOR_PXN, DESCRIPTOR_UXN, KERNEL_L2_TABLE_INDEX, L1_TABLE_INDEX, PAGE_SIZE,
+        PageTablePlan, ROOT_TABLE_INDEX, USER_L2_TABLE_INDEX, USER_L3_TABLE_INDEX,
+        construct_bootstrap_el0_page_tables, l0_index, l1_index, l2_index, l3_index,
+        page_descriptor, table_descriptor, table_entry_offset,
     };
     use crate::bootinfo::{NovaBootInfoV1, NovaBootInfoV2, NovaBootstrapUserWindowDescriptorV1};
 
@@ -696,6 +1184,8 @@ mod tests {
             0x9000_0000,
             0x9000_2000,
             0x9000_3000,
+            0x9000_B000,
+            BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES,
         );
 
         let plan = mapping.page_table_plan(request);
@@ -744,6 +1234,139 @@ mod tests {
         assert!(plan.user_image_mapping.is_page_aligned());
         assert!(plan.user_context_mapping.is_page_aligned());
         assert!(plan.user_stack_mapping.is_page_aligned());
+        assert_eq!(plan.page_table_phys_base, 0x9000_B000);
+        assert_eq!(plan.page_table_bytes, BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES);
+        assert_eq!(plan.root_table_phys_base, 0x9000_B000);
+        assert_eq!(plan.l1_table_phys_base, 0x9000_C000);
+        assert_eq!(plan.kernel_l2_table_phys_base, 0x9000_D000);
+        assert_eq!(plan.kernel_l3_table_phys_base, 0x9000_E000);
+        assert_eq!(plan.user_l2_table_phys_base, 0x9000_F000);
+        assert_eq!(plan.user_l3_table_phys_base, 0x9001_0000);
+    }
+
+    #[test]
+    fn bootstrap_el0_page_table_construction_writes_translation_tables() {
+        let plan = ready_bootstrap_el0_page_table_plan();
+        let mut entries = [u64::MAX; BOOTSTRAP_EL0_TRANSLATION_TABLE_ENTRIES];
+
+        let construction = construct_bootstrap_el0_page_tables(plan, &mut entries);
+
+        assert!(construction.ready());
+        assert_eq!(
+            construction.readiness,
+            BootstrapEl0PageTableConstructionReadiness::Ready
+        );
+        assert_eq!(
+            construction.source_readiness,
+            BootstrapEl0PageTableReadiness::Ready
+        );
+        assert_eq!(construction.root_table_phys_base, plan.root_table_phys_base);
+        assert_eq!(construction.page_table_bytes, plan.page_table_bytes);
+        assert_eq!(construction.mapped_pages, 16);
+        assert_eq!(
+            entries[table_entry_offset(
+                ROOT_TABLE_INDEX,
+                l0_index(plan.user_image_mapping.virt_base)
+            )],
+            table_descriptor(plan.l1_table_phys_base)
+        );
+        assert_eq!(
+            entries[table_entry_offset(L1_TABLE_INDEX, l1_index(plan.kernel_mapping.virt_base))],
+            table_descriptor(plan.kernel_l2_table_phys_base)
+        );
+        assert_eq!(
+            entries
+                [table_entry_offset(L1_TABLE_INDEX, l1_index(plan.user_image_mapping.virt_base))],
+            table_descriptor(plan.user_l2_table_phys_base)
+        );
+        assert_eq!(
+            entries[table_entry_offset(
+                KERNEL_L2_TABLE_INDEX,
+                l2_index(plan.kernel_mapping.virt_base)
+            )],
+            table_descriptor(plan.kernel_l3_table_phys_base)
+        );
+        assert_eq!(
+            entries[table_entry_offset(
+                USER_L2_TABLE_INDEX,
+                l2_index(plan.user_image_mapping.virt_base)
+            )],
+            table_descriptor(plan.user_l3_table_phys_base)
+        );
+
+        let image_entry = entries[table_entry_offset(
+            USER_L3_TABLE_INDEX,
+            l3_index(plan.user_image_mapping.virt_base),
+        )];
+        assert_eq!(
+            image_entry,
+            page_descriptor(plan.user_image_mapping, plan.user_image_mapping.phys_base)
+        );
+        assert_ne!(image_entry & DESCRIPTOR_NG, 0);
+        assert_ne!(image_entry & DESCRIPTOR_PXN, 0);
+        assert_eq!(image_entry & DESCRIPTOR_UXN, 0);
+
+        let context_entry = entries[table_entry_offset(
+            USER_L3_TABLE_INDEX,
+            l3_index(plan.user_context_mapping.virt_base),
+        )];
+        assert_eq!(
+            context_entry,
+            page_descriptor(
+                plan.user_context_mapping,
+                plan.user_context_mapping.phys_base
+            )
+        );
+        assert_ne!(context_entry & DESCRIPTOR_PXN, 0);
+        assert_ne!(context_entry & DESCRIPTOR_UXN, 0);
+
+        let stack_entry = entries[table_entry_offset(
+            USER_L3_TABLE_INDEX,
+            l3_index(plan.user_stack_mapping.virt_base),
+        )];
+        assert_eq!(
+            stack_entry,
+            page_descriptor(plan.user_stack_mapping, plan.user_stack_mapping.phys_base)
+        );
+        assert_eq!((stack_entry >> 6) & 0b11, 0b01);
+    }
+
+    #[test]
+    fn bootstrap_el0_page_table_plan_rejects_small_table_arena() {
+        let mapping = ready_bootstrap_el0_mapping_plan();
+        let request = BootstrapEl0PageTableRequest::new(
+            0x1000_0000,
+            0x5000,
+            0x9000_0000,
+            0x9000_2000,
+            0x9000_3000,
+            0x9000_B000,
+            BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES - PAGE_SIZE,
+        );
+
+        let plan = mapping.page_table_plan(request);
+
+        assert_eq!(
+            plan.readiness,
+            BootstrapEl0PageTableReadiness::PageTableArenaTooSmall
+        );
+    }
+
+    #[test]
+    fn bootstrap_el0_page_table_construction_refuses_short_output_buffer() {
+        let plan = ready_bootstrap_el0_page_table_plan();
+        let mut entries = [0; BOOTSTRAP_EL0_TRANSLATION_TABLE_ENTRIES - 1];
+
+        let construction = construct_bootstrap_el0_page_tables(plan, &mut entries);
+
+        assert_eq!(
+            construction.readiness,
+            BootstrapEl0PageTableConstructionReadiness::OutputBufferTooSmall
+        );
+        assert_eq!(
+            construction.source_readiness,
+            BootstrapEl0PageTableReadiness::Ready
+        );
     }
 
     #[test]
@@ -769,6 +1392,8 @@ mod tests {
             0x9000_0000,
             0x9000_1000,
             0x9000_2000,
+            0x9000_B000,
+            BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES,
         );
 
         let plan = mapping.page_table_plan(request);
@@ -792,6 +1417,8 @@ mod tests {
             0x9000_0001,
             0x9000_2000,
             0x9000_3000,
+            0x9000_B000,
+            BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES,
         );
 
         let plan = mapping.page_table_plan(request);
@@ -817,6 +1444,18 @@ mod tests {
             0x8100_0000,
             96,
             0x8000,
+        ))
+    }
+
+    fn ready_bootstrap_el0_page_table_plan() -> super::BootstrapEl0PageTablePlan {
+        ready_bootstrap_el0_mapping_plan().page_table_plan(BootstrapEl0PageTableRequest::new(
+            0x1000_0000,
+            0x5000,
+            0x9000_0000,
+            0x9000_2000,
+            0x9000_3000,
+            0x9000_B000,
+            BOOTSTRAP_EL0_TRANSLATION_TABLE_BYTES,
         ))
     }
 }

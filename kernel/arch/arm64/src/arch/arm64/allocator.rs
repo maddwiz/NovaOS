@@ -157,17 +157,21 @@ impl BootstrapEl0BackingFramePlan {
         matches!(self.readiness, BootstrapEl0BackingFrameReadiness::Ready)
     }
 
-    pub const fn page_table_request(
+    pub fn page_table_request(
         self,
         kernel_base: u64,
         kernel_size: u64,
     ) -> BootstrapEl0PageTableRequest {
+        let page_table_arena_base = self.arena_base.saturating_add(self.total_size);
+        let page_table_arena_size = self.arena_size.saturating_sub(self.total_size);
         BootstrapEl0PageTableRequest::new(
             kernel_base,
             kernel_size,
             self.image_phys_base,
             self.context_phys_base,
             self.stack_phys_base,
+            page_table_arena_base,
+            page_table_arena_size,
         )
     }
 }
@@ -282,6 +286,8 @@ mod tests {
             page_tables.user_stack_mapping.phys_base,
             backing.stack_phys_base
         );
+        assert_eq!(page_tables.page_table_phys_base, 0x9000_B000);
+        assert_eq!(page_tables.page_table_size, 0x15_000);
     }
 
     #[test]

@@ -29,9 +29,12 @@ use arch::arm64::exceptions::{
     BootstrapExceptionReturnCapture, read_bootstrap_exception_return_capture,
     reset_bootstrap_exception_return_capture,
 };
-#[cfg(all(target_os = "none", target_arch = "aarch64"))]
-use arch::arm64::mmu::BootstrapEl0MappingRequest;
 use arch::arm64::mmu::PageTablePlan;
+#[cfg(all(target_os = "none", target_arch = "aarch64"))]
+use arch::arm64::mmu::{
+    BootstrapEl0MappingRequest, BootstrapEl0PageTableConstruction, BootstrapEl0PageTablePlan,
+    construct_bootstrap_el0_page_tables,
+};
 use bootinfo::{
     BootSource, FramebufferFormat, NovaBootInfoV1, NovaBootInfoV2, NovaImageDigestV1,
     NovaVerificationInfoV1,
@@ -930,13 +933,39 @@ fn log_bootstrap_el0_boundary_plan<C: ConsoleSink>(
 
     console.write_str("[info] bootstrap el0 page tables ");
     if backing.ready() {
-        let page_tables = mapping.page_table_plan(
+        let page_table_plan = mapping.page_table_plan(
             backing.page_table_request(page_tables.kernel_base, page_tables.kernel_size),
         );
-        console.write_line(page_tables.readiness.label());
+        console.write_line(page_table_plan.readiness.label());
+        console.write_str("[info] bootstrap el0 page tables constructed ");
+        if page_table_plan.ready() {
+            let construction = unsafe { construct_live_bootstrap_el0_page_tables(page_table_plan) };
+            console.write_line(construction.readiness.label());
+        } else {
+            console.write_line("page-tables-not-ready");
+        }
     } else {
         console.write_line("backing-frames-not-ready");
+        console.write_line("[info] bootstrap el0 page tables constructed page-tables-not-ready");
     }
+}
+
+#[cfg(all(target_os = "none", target_arch = "aarch64"))]
+unsafe fn construct_live_bootstrap_el0_page_tables(
+    plan: BootstrapEl0PageTablePlan,
+) -> BootstrapEl0PageTableConstruction {
+    let entry_count = (plan.page_table_bytes / size_of::<u64>() as u64) as usize;
+    let entries = unsafe {
+        core::slice::from_raw_parts_mut(plan.page_table_phys_base as *mut u64, entry_count)
+    };
+    let construction = construct_bootstrap_el0_page_tables(plan, entries);
+    if construction.ready() {
+        clean_data_cache(
+            plan.page_table_phys_base as *const u8,
+            plan.page_table_bytes as usize,
+        );
+    }
+    construction
 }
 
 #[cfg(all(target_os = "none", target_arch = "aarch64"))]

@@ -77,7 +77,7 @@ Report links below point to local runtime artifacts; run \`make report\` if they
 
 ## Active Phase
 
-- active_phase: M0 portability refactor with Spark boot continuity
+- active_phase: M0 runtime spine with Spark boot continuity
 - repo_root: ${ROOT_DIR}
 - latest_report_generated_at_utc: ${report_generated_at}
 - latest_loop_timestamp_utc: ${loop_timestamp}
@@ -91,6 +91,7 @@ Report links below point to local runtime artifacts; run \`make report\` if they
 - \`nova_rt\` now carries a Rust mirror of the \`BootInfo v2\` draft alongside the live v1 handoff
 - \`services/acceld\` now has backend traits with CPU, GB10, RTX, and Hopper placeholder backends
 - \`services/memd\` now has topology-profile traits with UMA, discrete, NVLink, and MIG placeholders
+- \`services/policyd\`, \`services/agentd\`, \`services/intentd\`, \`services/scened\`, \`services/appbridged\`, and \`services/shelld\` now exist as first runtime-spine service crates backed by shared \`nova_rt\` service, policy, agent, intent, scene, and app bridge contracts
 - \`kernel/arch/x86_64\` and \`drivers/bus/pci\` exist as early portability lanes
 - \`kernel/arch/arm64\` now carries validated raw bringup state into the shared runtime and emits early boot-console output over QEMU trace plus framebuffer when present
 - \`abi/syscall/nova_syscall_v1.h\` and \`nova_rt\` now define the first typed syscall ABI draft, and \`kernel/arch/arm64\` now carries the Arm64 \`svc\` scaffold dispatcher, bound to a concrete current bootstrap task and bounded by bootstrap endpoint/shared-memory quotas, with the installed bootstrap runtime now marking the first reserved bootstrap endpoint and shared-memory lanes ready when the capsule grants them and those lanes returning real kernel-owned results in the QEMU probe
@@ -116,6 +117,7 @@ Report links below point to local runtime artifacts; run \`make report\` if they
 - the persisted observatory report still needs real Spark capture and comparison against the QEMU baseline
 - real Spark hardware acceptance is still missing for the observatory, loader, and kernel milestones because the actual operator/root/reboot flow still has to happen on hardware, and the loader milestone still needs both the returned handoff report and stage0 -> stage1 -> kernel evidence from hardware
 - x86_64, PCI, RTX, and Hopper lanes are placeholders only; no second hardware lane boots yet
+- the service graph is still a typed local runtime model; real kernel task creation, endpoint wiring, shared-memory grants, and service health publication are not integrated yet
 - timer, IRQ, topology, capability, endpoint routing beyond the first reserved bootstrap slot, shared-memory policy beyond the first reserved bootstrap region, a real EL0 syscall boundary, storage, shell, update, CPU inference, topology-aware \`memd\`, and native accelerator work are still ahead
 
 ## Latest Automation Status

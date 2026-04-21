@@ -9,6 +9,7 @@ pub mod bootstrap_task;
 pub mod digest;
 pub mod init_capsule;
 pub mod payload;
+pub mod service;
 pub mod syscall;
 pub mod verification;
 
@@ -34,6 +35,13 @@ pub use init_capsule::{
 };
 pub use payload::{
     NovaPayloadEntryAbi, NovaPayloadHeaderV1, NovaPayloadKind, NovaPayloadLoadMode, PayloadImage,
+};
+pub use service::{
+    NovaAgentId, NovaAppActionKind, NovaAppBridgeKind, NovaAppDescriptor, NovaAppId,
+    NovaIntentEnvelope, NovaIntentKind, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest,
+    NovaPolicyScope, NovaSceneDescriptor, NovaSceneId, NovaSceneMode, NovaServiceDescriptor,
+    NovaServiceId, NovaServiceKind, NovaServiceLaunchRequest, NovaServiceLaunchResult,
+    NovaServiceLaunchStatus, NovaServiceState, NovaServiceStatus,
 };
 pub use syscall::{
     NOVA_BOOTSTRAP_TRAP_IMM16, NOVA_SYSCALL_ARG_COUNT, NovaSyscallNumberV1, NovaSyscallRequestV1,

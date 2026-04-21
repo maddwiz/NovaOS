@@ -113,7 +113,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "novaos-agentd"
+version = "0.1.0"
+dependencies = [
+ "nova_rt",
+]
+
+[[package]]
+name = "novaos-appbridged"
+version = "0.1.0"
+dependencies = [
+ "nova_rt",
+]
+
+[[package]]
 name = "novaos-initd"
+version = "0.1.0"
+dependencies = [
+ "nova_rt",
+]
+
+[[package]]
+name = "novaos-intentd"
 version = "0.1.0"
 dependencies = [
  "nova_rt",
@@ -147,6 +168,27 @@ dependencies = [
 [[package]]
 name = "novaos-pci"
 version = "0.1.0"
+
+[[package]]
+name = "novaos-policyd"
+version = "0.1.0"
+dependencies = [
+ "nova_rt",
+]
+
+[[package]]
+name = "novaos-scened"
+version = "0.1.0"
+dependencies = [
+ "nova_rt",
+]
+
+[[package]]
+name = "novaos-shelld"
+version = "0.1.0"
+dependencies = [
+ "nova_rt",
+]
 
 [[package]]
 name = "novaos-stage1"

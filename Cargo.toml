@@ -11,7 +11,13 @@ members = [
     "kernel/arch/arm64",
     "apps/initd",
     "services/acceld",
+    "services/agentd",
+    "services/appbridged",
+    "services/intentd",
     "services/memd",
+    "services/policyd",
+    "services/scened",
+    "services/shelld",
 ]
 resolver = "2"
 

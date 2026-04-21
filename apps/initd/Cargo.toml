@@ -8,6 +8,10 @@ publish = false
 name = "initd-payload"
 path = "src/bin/initd_payload.rs"
 
+[[bin]]
+name = "initd-runtime"
+path = "src/bin/initd_runtime.rs"
+
 [features]
 default = []
 qemu_virt_trace = []

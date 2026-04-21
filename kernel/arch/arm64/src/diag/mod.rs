@@ -1,5 +1,34 @@
 use crate::arch::arm64::exceptions::ExceptionClass;
+#[cfg(all(
+    target_os = "none",
+    target_arch = "aarch64",
+    any(
+        feature = "bootstrap_kernel_svc_probe",
+        feature = "bootstrap_pretransfer_svc_probe",
+        feature = "bootstrap_trap_vector_trace"
+    )
+))]
+use crate::arch::arm64::exceptions::ExceptionVectors;
+#[cfg(all(
+    target_os = "none",
+    target_arch = "aarch64",
+    any(
+        feature = "bootstrap_kernel_svc_probe",
+        feature = "bootstrap_pretransfer_svc_probe"
+    )
+))]
+use crate::console::TraceConsole;
 use crate::console::{self, ConsoleSink};
+#[cfg(all(
+    target_os = "none",
+    target_arch = "aarch64",
+    any(
+        feature = "bootstrap_kernel_svc_probe",
+        feature = "bootstrap_pretransfer_svc_probe",
+        feature = "bootstrap_trap_vector_trace"
+    )
+))]
+use crate::el::read_runtime_vbar_el1;
 use crate::syscall::{
     Arm64SyscallFrame, SyscallDispatchState, dispatch_syscall,
     handle_lower_el_bootstrap_syscall_exception, handle_syscall_exception,
@@ -8,6 +37,33 @@ use crate::syscall::{
 use nova_rt::{
     NovaInitCapsuleCapabilityV1, NovaSyscallNumberV1, NovaSyscallRequestV1, NovaSyscallStatusV1,
 };
+
+#[cfg(all(
+    target_os = "none",
+    target_arch = "aarch64",
+    any(
+        feature = "bootstrap_kernel_svc_probe",
+        feature = "bootstrap_pretransfer_svc_probe",
+        feature = "bootstrap_trap_vector_trace"
+    )
+))]
+const EXCEPTION_VECTOR_ALIGNMENT_MASK: u64 = 2048 - 1;
+
+#[cfg(all(
+    target_os = "none",
+    target_arch = "aarch64",
+    any(
+        feature = "bootstrap_kernel_svc_probe",
+        feature = "bootstrap_pretransfer_svc_probe"
+    )
+))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct RuntimeExceptionProbeState {
+    current_el: u64,
+    spsel: u64,
+    vbar_el1: u64,
+    expected_vbar_el1: u64,
+}
 
 pub(crate) fn run_syscall_probe<C: ConsoleSink>(console: &mut C, state: SyscallDispatchState) {
     let denied_trace = dispatch_syscall(
@@ -229,3 +285,98 @@ pub(crate) fn trace_kernel_stage0_marker(message: &[u8]) {
     feature = "qemu_virt_trace"
 )))]
 pub(crate) fn trace_kernel_stage0_marker(_message: &[u8]) {}
+
+#[cfg(all(
+    target_os = "none",
+    target_arch = "aarch64",
+    any(
+        feature = "bootstrap_kernel_svc_probe",
+        feature = "bootstrap_pretransfer_svc_probe"
+    )
+))]
+pub(crate) fn read_runtime_exception_probe_state() -> RuntimeExceptionProbeState {
+    let current_el: u64;
+    let spsel: u64;
+    unsafe {
+        core::arch::asm!("mrs {}, CurrentEL", out(reg) current_el);
+        core::arch::asm!("mrs {}, SPSel", out(reg) spsel);
+    }
+
+    RuntimeExceptionProbeState {
+        current_el: (current_el >> 2) & 0b11,
+        spsel,
+        vbar_el1: read_runtime_vbar_el1(),
+        expected_vbar_el1: ExceptionVectors::installed_or_runtime().base,
+    }
+}
+
+#[cfg(all(
+    target_os = "none",
+    target_arch = "aarch64",
+    any(
+        feature = "bootstrap_kernel_svc_probe",
+        feature = "bootstrap_pretransfer_svc_probe"
+    )
+))]
+pub(crate) fn log_runtime_exception_probe_state(label: &str, state: RuntimeExceptionProbeState) {
+    let mut console = TraceConsole::new();
+    console.write_str("[info] ");
+    console.write_str(label);
+    console.write_str(" current_el_is_el1 ");
+    if state.current_el == 1 {
+        console.write_line("true");
+    } else {
+        console.write_line("false");
+    }
+
+    console.write_str("[info] ");
+    console.write_str(label);
+    console.write_str(" spsel_is_spx ");
+    if state.spsel == 1 {
+        console.write_line("true");
+    } else {
+        console.write_line("false");
+    }
+
+    console.write_str("[info] ");
+    console.write_str(label);
+    console.write_str(" runtime_vbar_aligned ");
+    if (state.expected_vbar_el1 & EXCEPTION_VECTOR_ALIGNMENT_MASK) == 0 {
+        console.write_line("true");
+    } else {
+        console.write_line("false");
+    }
+
+    console.write_str("[info] ");
+    console.write_str(label);
+    console.write_str(" vbar_matches_runtime ");
+    if state.vbar_el1 == state.expected_vbar_el1 {
+        console.write_line("true");
+    } else {
+        console.write_line("false");
+    }
+}
+
+#[cfg(all(
+    target_os = "none",
+    target_arch = "aarch64",
+    feature = "bootstrap_trap_vector_trace"
+))]
+pub(crate) fn log_bootstrap_exception_install_status(
+    vectors: ExceptionVectors,
+    installed_vectors: ExceptionVectors,
+) {
+    let readback_vbar = read_runtime_vbar_el1();
+
+    if (vectors.base & EXCEPTION_VECTOR_ALIGNMENT_MASK) == 0 {
+        trace_kernel_stage0_marker(b"NovaOS bootstrap vector base aligned\n");
+    } else {
+        trace_kernel_stage0_marker(b"NovaOS bootstrap vector base misaligned\n");
+    }
+
+    if readback_vbar == installed_vectors.base {
+        trace_kernel_stage0_marker(b"NovaOS bootstrap vbar install match\n");
+    } else {
+        trace_kernel_stage0_marker(b"NovaOS bootstrap vbar install mismatch\n");
+    }
+}

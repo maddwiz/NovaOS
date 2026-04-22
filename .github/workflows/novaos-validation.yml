@@ -17,7 +17,7 @@ jobs:
       ROOT_DIR: ${{ github.workspace }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Rust targets
         run: |
@@ -41,7 +41,7 @@ jobs:
         run: ./scripts/novaos-report.sh
 
       - name: Upload reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: novaos-validation-reports
           path: artifacts/reports/

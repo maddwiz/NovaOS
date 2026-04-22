@@ -1,3 +1,8 @@
+use crate::{
+    NOVA_INIT_CAPSULE_KNOWN_CAPABILITIES_V1, NOVA_INIT_CAPSULE_SERVICE_NAME_LEN,
+    NovaBootstrapTaskContextV1, NovaInitCapsuleCapabilityV1, encode_init_capsule_service_name,
+};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(transparent)]
 pub struct NovaServiceId(pub u64);
@@ -54,6 +59,55 @@ pub struct NovaAppId(pub u64);
 impl NovaAppId {
     pub const fn new(raw: u64) -> Self {
         Self(raw)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct NovaTaskId(pub u64);
+
+impl NovaTaskId {
+    pub const UNASSIGNED: Self = Self(0);
+    pub const BOOTSTRAP_INITD: Self = Self(1);
+
+    pub const fn new(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    pub const fn is_assigned(self) -> bool {
+        self.0 != 0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct NovaEndpointId(pub u64);
+
+impl NovaEndpointId {
+    pub const UNASSIGNED: Self = Self(0);
+
+    pub const fn new(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    pub const fn is_assigned(self) -> bool {
+        self.0 != 0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct NovaSharedMemoryRegionId(pub u64);
+
+impl NovaSharedMemoryRegionId {
+    pub const UNASSIGNED: Self = Self(0);
+
+    pub const fn new(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    pub const fn is_assigned(self) -> bool {
+        self.0 != 0
     }
 }
 
@@ -157,6 +211,22 @@ pub struct NovaServiceLaunchRequest {
     pub flags: u64,
 }
 
+impl NovaServiceLaunchRequest {
+    pub const fn new(
+        requester: NovaServiceId,
+        target: NovaServiceId,
+        scene: NovaSceneId,
+        flags: u64,
+    ) -> Self {
+        Self {
+            requester,
+            target,
+            scene,
+            flags,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u16)]
 pub enum NovaServiceLaunchStatus {
@@ -190,6 +260,194 @@ impl NovaServiceLaunchResult {
 
     pub const fn deferred(target: NovaServiceId, detail: u64) -> Self {
         Self::new(target, NovaServiceLaunchStatus::Deferred, detail)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NovaServiceBootstrapRequirement {
+    pub requested_capabilities: u64,
+    pub endpoint_slots: u32,
+    pub shared_memory_regions: u32,
+}
+
+impl NovaServiceBootstrapRequirement {
+    pub const fn new(
+        requested_capabilities: u64,
+        endpoint_slots: u32,
+        shared_memory_regions: u32,
+    ) -> Self {
+        Self {
+            requested_capabilities,
+            endpoint_slots,
+            shared_memory_regions,
+        }
+    }
+
+    pub const fn is_valid(self) -> bool {
+        let known_caps =
+            (self.requested_capabilities & !NOVA_INIT_CAPSULE_KNOWN_CAPABILITIES_V1) == 0;
+        let endpoint_cap = self.has_capability(NovaInitCapsuleCapabilityV1::EndpointBootstrap);
+        let shared_memory_cap =
+            self.has_capability(NovaInitCapsuleCapabilityV1::SharedMemoryBootstrap);
+        known_caps
+            && ((self.endpoint_slots == 0 && !endpoint_cap)
+                || (self.endpoint_slots != 0 && endpoint_cap))
+            && ((self.shared_memory_regions == 0 && !shared_memory_cap)
+                || (self.shared_memory_regions != 0 && shared_memory_cap))
+    }
+
+    pub const fn has_capability(self, capability: NovaInitCapsuleCapabilityV1) -> bool {
+        (self.requested_capabilities & capability as u64) != 0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NovaServiceLaunchSpec {
+    pub descriptor: NovaServiceDescriptor,
+    pub bootstrap: NovaServiceBootstrapRequirement,
+}
+
+impl NovaServiceLaunchSpec {
+    pub const fn new(
+        descriptor: NovaServiceDescriptor,
+        bootstrap: NovaServiceBootstrapRequirement,
+    ) -> Self {
+        Self {
+            descriptor,
+            bootstrap,
+        }
+    }
+
+    pub fn is_valid(self) -> bool {
+        !self.descriptor.id.is_empty()
+            && self.bootstrap.is_valid()
+            && self.encoded_service_name().is_some()
+    }
+
+    pub const fn launch_request(
+        self,
+        requester: NovaServiceId,
+        scene: NovaSceneId,
+    ) -> NovaServiceLaunchRequest {
+        NovaServiceLaunchRequest::new(requester, self.descriptor.id, scene, 0)
+    }
+
+    pub fn encoded_service_name(self) -> Option<[u8; NOVA_INIT_CAPSULE_SERVICE_NAME_LEN]> {
+        encode_init_capsule_service_name(self.descriptor.name)
+    }
+
+    pub fn bootstrap_context_v1(self) -> Option<NovaBootstrapTaskContextV1> {
+        Some(NovaBootstrapTaskContextV1::new(
+            self.encoded_service_name()?,
+            self.bootstrap.requested_capabilities,
+            self.bootstrap.endpoint_slots,
+            self.bootstrap.shared_memory_regions,
+        ))
+        .filter(|context| context.is_valid())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u16)]
+pub enum NovaServiceBindingState {
+    ModelOnly = 0,
+    Planned = 1,
+    KernelTaskReady = 2,
+    EndpointReady = 3,
+    SharedMemoryReady = 4,
+    KernelBacked = 5,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NovaServiceKernelBinding {
+    pub service: NovaServiceId,
+    pub task: NovaTaskId,
+    pub control_endpoint: NovaEndpointId,
+    pub shared_memory_region: NovaSharedMemoryRegionId,
+    pub state: NovaServiceBindingState,
+    pub health_generation: u64,
+}
+
+impl NovaServiceKernelBinding {
+    pub const fn model_only(service: NovaServiceId) -> Self {
+        Self {
+            service,
+            task: NovaTaskId::UNASSIGNED,
+            control_endpoint: NovaEndpointId::UNASSIGNED,
+            shared_memory_region: NovaSharedMemoryRegionId::UNASSIGNED,
+            state: NovaServiceBindingState::ModelOnly,
+            health_generation: 0,
+        }
+    }
+
+    pub const fn planned(
+        service: NovaServiceId,
+        task: NovaTaskId,
+        control_endpoint: NovaEndpointId,
+        shared_memory_region: NovaSharedMemoryRegionId,
+    ) -> Self {
+        Self {
+            service,
+            task,
+            control_endpoint,
+            shared_memory_region,
+            state: NovaServiceBindingState::Planned,
+            health_generation: 0,
+        }
+    }
+
+    pub const fn kernel_backed(
+        service: NovaServiceId,
+        task: NovaTaskId,
+        control_endpoint: NovaEndpointId,
+        shared_memory_region: NovaSharedMemoryRegionId,
+        health_generation: u64,
+    ) -> Self {
+        Self {
+            service,
+            task,
+            control_endpoint,
+            shared_memory_region,
+            state: NovaServiceBindingState::KernelBacked,
+            health_generation,
+        }
+    }
+
+    pub const fn has_kernel_objects(self) -> bool {
+        self.task.is_assigned()
+            && self.control_endpoint.is_assigned()
+            && self.shared_memory_region.is_assigned()
+    }
+
+    pub const fn can_publish_kernel_health(self) -> bool {
+        self.has_kernel_objects()
+            && matches!(self.state, NovaServiceBindingState::KernelBacked)
+            && self.health_generation != 0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NovaServiceKernelLaunchPlan {
+    pub descriptor: NovaServiceDescriptor,
+    pub request: NovaServiceLaunchRequest,
+    pub binding: NovaServiceKernelBinding,
+}
+
+impl NovaServiceKernelLaunchPlan {
+    pub const fn new(
+        descriptor: NovaServiceDescriptor,
+        request: NovaServiceLaunchRequest,
+        binding: NovaServiceKernelBinding,
+    ) -> Self {
+        Self {
+            descriptor,
+            request,
+            binding,
+        }
+    }
+
+    pub const fn requires_kernel_launch(self) -> bool {
+        self.descriptor.required && !self.binding.can_publish_kernel_health()
     }
 }
 
@@ -295,8 +553,11 @@ pub struct NovaAppDescriptor {
 #[cfg(test)]
 mod tests {
     use super::{
-        NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest, NovaPolicyScope, NovaServiceId,
-        NovaServiceKind, NovaServiceLaunchResult, NovaServiceLaunchStatus, NovaServiceStatus,
+        NovaEndpointId, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest, NovaPolicyScope,
+        NovaServiceBindingState, NovaServiceBootstrapRequirement, NovaServiceId,
+        NovaServiceKernelBinding, NovaServiceKernelLaunchPlan, NovaServiceKind,
+        NovaServiceLaunchRequest, NovaServiceLaunchResult, NovaServiceLaunchSpec,
+        NovaServiceLaunchStatus, NovaServiceStatus, NovaSharedMemoryRegionId, NovaTaskId,
     };
 
     #[test]
@@ -311,6 +572,75 @@ mod tests {
         let result = NovaServiceLaunchResult::started(NovaServiceId::POLICYD);
         assert_eq!(result.target, NovaServiceId::POLICYD);
         assert_eq!(result.status, NovaServiceLaunchStatus::Started);
+    }
+
+    #[test]
+    fn service_launch_spec_rejects_unknown_bootstrap_capability_bits() {
+        let descriptor = super::NovaServiceDescriptor::new(
+            NovaServiceId::POLICYD,
+            "policyd",
+            NovaServiceKind::Core,
+            true,
+            10,
+        );
+        let spec = NovaServiceLaunchSpec::new(
+            descriptor,
+            NovaServiceBootstrapRequirement::new(
+                super::NOVA_INIT_CAPSULE_KNOWN_CAPABILITIES_V1 | (1 << 20),
+                0,
+                0,
+            ),
+        );
+
+        assert!(!spec.is_valid());
+    }
+
+    #[test]
+    fn service_launch_spec_encodes_init_capsule_service_name() {
+        let descriptor = super::NovaServiceDescriptor::new(
+            NovaServiceId::POLICYD,
+            "policyd",
+            NovaServiceKind::Core,
+            true,
+            10,
+        );
+        let spec = NovaServiceLaunchSpec::new(
+            descriptor,
+            NovaServiceBootstrapRequirement::new(
+                super::NovaInitCapsuleCapabilityV1::BootLog as u64,
+                0,
+                0,
+            ),
+        );
+
+        assert_eq!(
+            spec.encoded_service_name().expect("service name")[..7],
+            *b"policyd"
+        );
+    }
+
+    #[test]
+    fn service_launch_spec_builds_bootstrap_context() {
+        let descriptor = super::NovaServiceDescriptor::new(
+            NovaServiceId::AGENTD,
+            "agentd",
+            NovaServiceKind::Core,
+            true,
+            20,
+        );
+        let caps = super::NovaInitCapsuleCapabilityV1::BootLog as u64
+            | super::NovaInitCapsuleCapabilityV1::EndpointBootstrap as u64
+            | super::NovaInitCapsuleCapabilityV1::SharedMemoryBootstrap as u64;
+        let spec = NovaServiceLaunchSpec::new(
+            descriptor,
+            NovaServiceBootstrapRequirement::new(caps, 1, 1),
+        );
+        let context = spec.bootstrap_context_v1().expect("context");
+
+        assert!(context.is_valid());
+        assert_eq!(context.service_name(), "agentd");
+        assert_eq!(context.endpoint_slots, 1);
+        assert_eq!(context.shared_memory_regions, 1);
     }
 
     #[test]
@@ -332,6 +662,69 @@ mod tests {
             NovaServiceLaunchStatus::Deferred
         );
         assert_eq!(deferred.last_result.detail, 7);
+    }
+
+    #[test]
+    fn service_kernel_binding_tracks_planned_and_backed_states() {
+        let planned = NovaServiceKernelBinding::planned(
+            NovaServiceId::POLICYD,
+            NovaTaskId::new(0x1001),
+            NovaEndpointId::new(0x2001),
+            NovaSharedMemoryRegionId::new(0x3001),
+        );
+        let backed = NovaServiceKernelBinding::kernel_backed(
+            NovaServiceId::POLICYD,
+            planned.task,
+            planned.control_endpoint,
+            planned.shared_memory_region,
+            9,
+        );
+
+        assert_eq!(planned.state, NovaServiceBindingState::Planned);
+        assert!(planned.has_kernel_objects());
+        assert!(!planned.can_publish_kernel_health());
+        assert!(backed.can_publish_kernel_health());
+    }
+
+    #[test]
+    fn service_kernel_launch_plan_requires_kernel_until_backed() {
+        let descriptor = super::NovaServiceDescriptor::new(
+            NovaServiceId::AGENTD,
+            "agentd",
+            NovaServiceKind::Core,
+            true,
+            20,
+        );
+        let request = NovaServiceLaunchRequest::new(
+            NovaServiceId::INITD,
+            NovaServiceId::AGENTD,
+            super::NovaSceneId::ROOT,
+            0,
+        );
+        let planned = NovaServiceKernelLaunchPlan::new(
+            descriptor,
+            request,
+            NovaServiceKernelBinding::planned(
+                NovaServiceId::AGENTD,
+                NovaTaskId::new(0x1002),
+                NovaEndpointId::new(0x2002),
+                NovaSharedMemoryRegionId::new(0x3002),
+            ),
+        );
+        let backed = NovaServiceKernelLaunchPlan::new(
+            descriptor,
+            request,
+            NovaServiceKernelBinding::kernel_backed(
+                NovaServiceId::AGENTD,
+                NovaTaskId::new(0x1002),
+                NovaEndpointId::new(0x2002),
+                NovaSharedMemoryRegionId::new(0x3002),
+                1,
+            ),
+        );
+
+        assert!(planned.requires_kernel_launch());
+        assert!(!backed.requires_kernel_launch());
     }
 
     #[test]

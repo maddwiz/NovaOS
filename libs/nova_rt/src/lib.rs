@@ -38,10 +38,13 @@ pub use payload::{
 };
 pub use service::{
     NovaAgentId, NovaAppActionKind, NovaAppBridgeKind, NovaAppDescriptor, NovaAppId,
-    NovaIntentEnvelope, NovaIntentKind, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest,
-    NovaPolicyScope, NovaSceneDescriptor, NovaSceneId, NovaSceneMode, NovaServiceDescriptor,
-    NovaServiceId, NovaServiceKind, NovaServiceLaunchRequest, NovaServiceLaunchResult,
-    NovaServiceLaunchStatus, NovaServiceState, NovaServiceStatus,
+    NovaEndpointId, NovaIntentEnvelope, NovaIntentKind, NovaPolicyAction, NovaPolicyDecision,
+    NovaPolicyRequest, NovaPolicyScope, NovaSceneDescriptor, NovaSceneId, NovaSceneMode,
+    NovaServiceBindingState, NovaServiceBootstrapRequirement, NovaServiceDescriptor, NovaServiceId,
+    NovaServiceKernelBinding, NovaServiceKernelLaunchPlan, NovaServiceKind,
+    NovaServiceLaunchRequest, NovaServiceLaunchResult, NovaServiceLaunchSpec,
+    NovaServiceLaunchStatus, NovaServiceState, NovaServiceStatus, NovaSharedMemoryRegionId,
+    NovaTaskId,
 };
 pub use syscall::{
     NOVA_BOOTSTRAP_TRAP_IMM16, NOVA_SYSCALL_ARG_COUNT, NovaSyscallNumberV1, NovaSyscallRequestV1,

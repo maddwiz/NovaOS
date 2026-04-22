@@ -26,6 +26,18 @@ This service graph is an additive runtime layer inside the existing M0-M17 roadm
 
 `apps/initd` also publishes a static boot status page for that first runtime spine. Required services are reported as started/running, while optional `shelld` is reported as deferred until an operator shell boundary is needed.
 
-The shared IDs, descriptors, service statuses, launch requests, launch results, policy decisions, intent envelopes, scene IDs, app IDs, and agent IDs live in `libs/nova_rt::service`.
+## Launch Manifest V0
+
+`libs/nova_rt::service` now defines a local launch manifest model:
+
+- `NovaServiceLaunchSpec` binds a service descriptor to bootstrap capability, endpoint-slot, and shared-memory requirements.
+- `NovaServiceKernelBinding` names the future task, control endpoint, shared-memory region, binding state, and health generation for a service.
+- `NovaServiceKernelLaunchPlan` ties the descriptor, launch request, and future kernel binding together.
+
+`apps/initd` publishes static launch specs for the first service chain and a deterministic kernel-binding plan for required services. Optional `shelld` remains model-only until an operator shell boundary is requested.
+
+This step does not allocate syscall numbers, does not modify `kernel/**`, and does not change boot handoff behavior.
+
+The shared IDs, descriptors, service statuses, launch specs, kernel bindings, launch requests, launch results, policy decisions, intent envelopes, scene IDs, app IDs, and agent IDs live in `libs/nova_rt::service`.
 
 This is still a local model, not a true process launch graph. Real kernel task creation, endpoint wiring, shared-memory grants, and kernel-backed service health publication remain future integration work.

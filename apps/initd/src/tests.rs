@@ -1,5 +1,8 @@
-use crate::{core_launch_table, initd_boot_snapshot, initd_boot_status_page};
-use nova_rt::{NovaServiceId, NovaServiceLaunchStatus, NovaServiceState};
+use crate::{
+    core_launch_plan, core_launch_table, initd_boot_snapshot, initd_boot_status_page,
+    initd_kernel_launch_plan_page,
+};
+use nova_rt::{NovaServiceBindingState, NovaServiceId, NovaServiceLaunchStatus, NovaServiceState};
 
 #[test]
 fn init_launch_table_starts_policy_before_agents_and_intents() {
@@ -52,4 +55,60 @@ fn init_status_page_keeps_optional_shell_deferred() {
 
     assert_eq!(status.state, NovaServiceState::NotStarted);
     assert_eq!(status.last_result.status, NovaServiceLaunchStatus::Deferred);
+}
+
+#[test]
+fn core_launch_specs_match_static_launch_order() {
+    let table = core_launch_table();
+    let plan = core_launch_plan();
+
+    assert_eq!(table.service_count(), plan.service_count());
+    for (index, service) in table.services.iter().enumerate() {
+        assert_eq!(service.id, plan.specs[index].descriptor.id);
+    }
+}
+
+#[test]
+fn core_launch_plan_resolves_policyd_request_and_context() {
+    let plan = core_launch_plan();
+    let request = plan
+        .launch_request_for(NovaServiceId::POLICYD)
+        .expect("policyd request");
+    let spec = plan.spec_for(NovaServiceId::POLICYD).expect("policyd spec");
+    let context = spec.bootstrap_context_v1().expect("bootstrap context");
+
+    assert_eq!(request.requester, NovaServiceId::INITD);
+    assert_eq!(request.target, NovaServiceId::POLICYD);
+    assert_eq!(context.service_name(), "policyd");
+    assert_eq!(context.endpoint_slots, 1);
+    assert_eq!(context.shared_memory_regions, 1);
+}
+
+#[test]
+fn core_launch_plan_keeps_optional_shell_model_only() {
+    let status = initd_boot_status_page()
+        .status_for(NovaServiceId::SHELLD)
+        .expect("shelld status");
+    let kernel_plan = initd_kernel_launch_plan_page()
+        .plan_for(NovaServiceId::SHELLD)
+        .expect("shelld kernel plan");
+
+    assert_eq!(status.last_result.status, NovaServiceLaunchStatus::Deferred);
+    assert_eq!(
+        kernel_plan.binding.state,
+        NovaServiceBindingState::ModelOnly
+    );
+    assert!(!kernel_plan.binding.has_kernel_objects());
+}
+
+#[test]
+fn core_launch_plan_validates_unique_ids_and_order() {
+    let plan = core_launch_plan();
+    let kernel_plan = initd_kernel_launch_plan_page();
+
+    assert!(plan.validate());
+    assert_eq!(plan.required_service_count(), 7);
+    assert!(kernel_plan.ready_for_kernel_handoff());
+    assert_eq!(kernel_plan.planned_required_service_count(), 7);
+    assert_eq!(kernel_plan.kernel_backed_service_count(), 0);
 }

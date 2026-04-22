@@ -21,10 +21,19 @@ pub fn parse_command(input: &str) -> Result<ShellCommand, ShellCommandParseError
         "services" | "svc" => Ok(ShellCommand::Services),
         "scenes" | "scene ls" => Ok(ShellCommand::Scenes),
         "scene root" => Ok(ShellCommand::SwitchScene(NovaSceneId::ROOT)),
-        "launch policyd" => Ok(ShellCommand::LaunchService(NovaServiceId::POLICYD)),
-        "launch agentd" => Ok(ShellCommand::LaunchService(NovaServiceId::AGENTD)),
-        "launch intentd" => Ok(ShellCommand::LaunchService(NovaServiceId::INTENTD)),
+        "launch policyd" => launch_service(NovaServiceId::POLICYD),
+        "launch agentd" => launch_service(NovaServiceId::AGENTD),
+        "launch memd" => launch_service(NovaServiceId::MEMD),
+        "launch acceld" => launch_service(NovaServiceId::ACCELD),
+        "launch intentd" => launch_service(NovaServiceId::INTENTD),
+        "launch scened" => launch_service(NovaServiceId::SCENED),
+        "launch appbridged" => launch_service(NovaServiceId::APPBRIDGED),
+        "launch shelld" => launch_service(NovaServiceId::SHELLD),
         "status" => Ok(ShellCommand::Intent(NovaIntentKind::RequestStatus)),
         _ => Err(ShellCommandParseError::Unknown),
     }
+}
+
+const fn launch_service(service: NovaServiceId) -> Result<ShellCommand, ShellCommandParseError> {
+    Ok(ShellCommand::LaunchService(service))
 }

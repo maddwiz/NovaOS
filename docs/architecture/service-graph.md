@@ -42,4 +42,6 @@ This step does not allocate syscall numbers, does not modify `kernel/**`, and do
 
 The shared IDs, descriptors, service statuses, launch specs, kernel bindings, launch requests, launch results, policy decisions, intent envelopes, scene IDs, app IDs, and agent IDs live in `libs/nova_rt::service`.
 
+`services/shelld` now parses launch commands for the full first runtime spine, and `services/intentd` has locked route coverage for status, scene switching, app opening, launch requests, and explicit target overrides. This gives the operator shell and intent router a shared service vocabulary without introducing kernel dependencies.
+
 This is still a local model, not a true process launch graph. Real kernel task creation, endpoint wiring, shared-memory grants, and kernel-backed service health publication remain future integration work.

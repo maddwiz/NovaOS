@@ -19,6 +19,34 @@ fn parser_launches_core_services_by_name() {
         parse_command("launch policyd"),
         Ok(ShellCommand::LaunchService(NovaServiceId::POLICYD))
     );
+    assert_eq!(
+        parse_command("launch memd"),
+        Ok(ShellCommand::LaunchService(NovaServiceId::MEMD))
+    );
+    assert_eq!(
+        parse_command("launch acceld"),
+        Ok(ShellCommand::LaunchService(NovaServiceId::ACCELD))
+    );
+}
+
+#[test]
+fn parser_launches_interaction_and_bridge_services_by_name() {
+    assert_eq!(
+        parse_command("launch intentd"),
+        Ok(ShellCommand::LaunchService(NovaServiceId::INTENTD))
+    );
+    assert_eq!(
+        parse_command("launch scened"),
+        Ok(ShellCommand::LaunchService(NovaServiceId::SCENED))
+    );
+    assert_eq!(
+        parse_command("launch appbridged"),
+        Ok(ShellCommand::LaunchService(NovaServiceId::APPBRIDGED))
+    );
+    assert_eq!(
+        parse_command("launch shelld"),
+        Ok(ShellCommand::LaunchService(NovaServiceId::SHELLD))
+    );
 }
 
 #[test]

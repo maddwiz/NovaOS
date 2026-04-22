@@ -15,9 +15,9 @@ Report links below point to local runtime artifacts; run `make report` if they a
 
 - active_phase: M0 portability refactor + runtime spine with Spark boot continuity
 - repo_root: /home/nova/NovaOS
-- latest_report_generated_at_utc: 20260422T214152Z
-- latest_loop_timestamp_utc: 20260422T214124Z
-- latest_loop_iteration: 5653
+- latest_report_generated_at_utc: 20260422T215939Z
+- latest_loop_timestamp_utc: 20260422T215911Z
+- latest_loop_iteration: 5656
 
 ## Durable Baseline
 
@@ -25,7 +25,7 @@ Report links below point to local runtime artifacts; run `make report` if they a
 - the live boot chain still uses `NovaBootInfoV1`, typed Nova Payload v1 images, digest metadata, and verification metadata as its primary contract, while the loader also keeps an internal/transitional `BootInfo v2` sidecar with display/storage/network path facts plus one integrated/UMA accelerator seed that stage1 carries into the raw kernel entry under a dedicated payload ABI and the raw entry resolves into a compact validated v2 bringup summary before current planning continues on v1
 - `libs/nova_fabric` now defines portable platform, topology, queue, pool, and accelerator-seed contracts
 - `nova_rt` now carries a Rust mirror of the `BootInfo v2` draft alongside the live v1 handoff
-- `services/acceld` now has backend traits with CPU, GB10, RTX, and Hopper placeholder backends
+- `services/acceld` now has backend traits with CPU, GB10, RTX, and Hopper placeholder backends plus a static typed dispatch request/plan model for selecting placeholder backends and fabric queue classes without claiming native accelerator integration yet
 - `services/memd` now has topology-profile traits with UMA, discrete, NVLink, and MIG placeholders plus a static typed placement request/plan model for selecting supported profile pools without claiming real UMA residency policy yet
 - `services/policyd`, `services/agentd`, `services/intentd`, `services/scened`, `services/appbridged`, and `services/shelld` now exist as additive runtime-spine service crates backed by shared `nova_rt` service, policy, agent, intent, scene, app bridge, service status, service-owned launch-spec, kernel-binding, and launch-result contracts, and `apps/initd` now publishes a typed local boot status page plus a launch manifest assembled from those service-owned specs, a policyd-evaluated launch decision for each service report, a deterministic kernel-binding plan for the first required service chain, and an operator-readable joined runtime report while deferring optional `shelld`. `policyd` now returns typed audit records for evaluated requests, `shelld` now parses launch commands for the full first service spine, exposes typed service-status and scene-list output lines, `scened` owns typed scene manifests/checkpoints/restore plans plus root scene bindings, `appbridged` owns manifest-backed app action support and approval routing, `intentd` has route coverage for status, scene switching, app opening, launch requests, explicit target overrides, and scene-scoped policy request projection into `policyd`, and `agentd` now owns lifecycle labels, runtime records, quota snapshots/decisions for tool grants, service delegation, and memory pages, plus scene participation checks
 - `kernel/arch/x86_64` and `drivers/bus/pci` exist as early portability lanes
@@ -71,9 +71,9 @@ Report links below point to local runtime artifacts; run `make report` if they a
 - bootstrap_el0_diagnostic_status: svc_returned_to_el0_spin
 - bootstrap_svc_diagnostic_status: returned
 - bootstrap_trap_diagnostic_status: returned
-- latest_report: /home/nova/NovaOS/artifacts/reports/novaos-report-20260422T214152Z.md
-- latest_loop_log: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260422T214124Z.log
-- latest_loop_summary: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260422T214124Z.summary
+- latest_report: /home/nova/NovaOS/artifacts/reports/novaos-report-20260422T215939Z.md
+- latest_loop_log: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260422T215911Z.log
+- latest_loop_summary: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260422T215911Z.summary
 - latest_bootstrap_kernel_svc_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-kernel-svc-diagnostic-20260422T000906Z.log
 - latest_bootstrap_pretransfer_svc_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-pretransfer-svc-diagnostic-20260418T151905Z.log
 - latest_bootstrap_el0_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-el0-diagnostic-20260421T142322Z.log

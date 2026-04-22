@@ -1,7 +1,7 @@
 use crate::{POLICYD_LAUNCH_SPEC, default_policy_matrix, evaluate_policy};
 use nova_rt::{
     NovaAgentId, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest, NovaPolicyScope,
-    NovaServiceId,
+    NovaSceneId, NovaServiceId,
 };
 
 #[test]
@@ -47,6 +47,25 @@ fn default_matrix_asks_before_agent_or_app_actions() {
     };
 
     assert_eq!(evaluate_policy(request), NovaPolicyDecision::Ask);
+}
+
+#[test]
+fn system_scope_rules_apply_as_global_defaults() {
+    let route_intent = NovaPolicyRequest {
+        subject_service: NovaServiceId::INTENTD,
+        subject_agent: NovaAgentId::INIT,
+        action: NovaPolicyAction::RouteIntent,
+        scope: NovaPolicyScope::Scene(NovaSceneId::ROOT),
+    };
+    let app_action = NovaPolicyRequest {
+        subject_service: NovaServiceId::APPBRIDGED,
+        subject_agent: NovaAgentId::INIT,
+        action: NovaPolicyAction::AppAction,
+        scope: NovaPolicyScope::Service(NovaServiceId::APPBRIDGED),
+    };
+
+    assert_eq!(evaluate_policy(route_intent), NovaPolicyDecision::Ask);
+    assert_eq!(evaluate_policy(app_action), NovaPolicyDecision::Ask);
 }
 
 #[test]

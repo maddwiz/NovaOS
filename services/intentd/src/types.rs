@@ -1,5 +1,6 @@
 use nova_rt::{
-    NovaIntentEnvelope, NovaIntentKind, NovaPolicyDecision, NovaServiceId, NovaServiceLaunchStatus,
+    NovaIntentEnvelope, NovaIntentKind, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest,
+    NovaPolicyScope, NovaServiceId, NovaServiceLaunchStatus,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -15,6 +16,34 @@ pub struct IntentPlan {
     pub primary_service: NovaServiceId,
     pub step: IntentPlanStep,
     pub requires_approval: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IntentPolicyProjection {
+    pub intent_id: u64,
+    pub request: NovaPolicyRequest,
+}
+
+pub const fn policy_request_for_intent(intent: NovaIntentEnvelope) -> IntentPolicyProjection {
+    IntentPolicyProjection {
+        intent_id: intent.id,
+        request: NovaPolicyRequest {
+            subject_service: NovaServiceId::INTENTD,
+            subject_agent: intent.source_agent,
+            action: NovaPolicyAction::RouteIntent,
+            scope: NovaPolicyScope::Scene(intent.scene),
+        },
+    }
+}
+
+pub const fn route_intent_with_policy(
+    intent: NovaIntentEnvelope,
+    decision: NovaPolicyDecision,
+) -> IntentPlan {
+    route_intent(NovaIntentEnvelope {
+        policy_hint: decision,
+        ..intent
+    })
 }
 
 pub const fn route_intent(intent: NovaIntentEnvelope) -> IntentPlan {

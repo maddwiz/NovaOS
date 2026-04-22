@@ -1,6 +1,9 @@
-use crate::{INTENTD_LAUNCH_SPEC, route_intent};
+use crate::{
+    INTENTD_LAUNCH_SPEC, policy_request_for_intent, route_intent, route_intent_with_policy,
+};
 use nova_rt::{
-    NovaAgentId, NovaIntentEnvelope, NovaIntentKind, NovaPolicyDecision, NovaSceneId, NovaServiceId,
+    NovaAgentId, NovaIntentEnvelope, NovaIntentKind, NovaPolicyAction, NovaPolicyDecision,
+    NovaPolicyScope, NovaSceneId, NovaServiceId,
 };
 
 #[test]
@@ -62,6 +65,45 @@ fn explicit_target_overrides_default_route() {
 
     assert_eq!(plan.primary_service, NovaServiceId::AGENTD);
     assert_eq!(plan.step.target_service, NovaServiceId::AGENTD);
+}
+
+#[test]
+fn intent_policy_projection_routes_through_scene_scope() {
+    let intent = NovaIntentEnvelope {
+        id: 5,
+        source_agent: NovaAgentId::new(77),
+        scene: NovaSceneId::ROOT,
+        target_service: NovaServiceId::new(0),
+        kind: NovaIntentKind::SwitchScene,
+        policy_hint: NovaPolicyDecision::Deny,
+    };
+    let projection = policy_request_for_intent(intent);
+
+    assert_eq!(projection.intent_id, 5);
+    assert_eq!(projection.request.subject_service, NovaServiceId::INTENTD);
+    assert_eq!(projection.request.subject_agent, NovaAgentId::new(77));
+    assert_eq!(projection.request.action, NovaPolicyAction::RouteIntent);
+    assert_eq!(
+        projection.request.scope,
+        NovaPolicyScope::Scene(NovaSceneId::ROOT)
+    );
+}
+
+#[test]
+fn route_with_policy_decision_replaces_hint() {
+    let intent = NovaIntentEnvelope {
+        id: 6,
+        source_agent: NovaAgentId::INIT,
+        scene: NovaSceneId::ROOT,
+        target_service: NovaServiceId::new(0),
+        kind: NovaIntentKind::RequestStatus,
+        policy_hint: NovaPolicyDecision::Deny,
+    };
+    let plan = route_intent_with_policy(intent, NovaPolicyDecision::Ask);
+
+    assert_eq!(plan.primary_service, NovaServiceId::SHELLD);
+    assert_eq!(plan.step.policy, NovaPolicyDecision::Ask);
+    assert!(plan.requires_approval);
 }
 
 #[test]

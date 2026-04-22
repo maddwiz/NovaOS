@@ -129,7 +129,7 @@ pub fn evaluate_policy(request: NovaPolicyRequest) -> NovaPolicyDecision {
 
 const fn policy_scope_matches(rule_scope: NovaPolicyScope, request_scope: NovaPolicyScope) -> bool {
     match (rule_scope, request_scope) {
-        (NovaPolicyScope::System, NovaPolicyScope::System) => true,
+        (NovaPolicyScope::System, _) => true,
         (NovaPolicyScope::Service(lhs), NovaPolicyScope::Service(rhs)) => lhs.0 == rhs.0,
         (NovaPolicyScope::Scene(lhs), NovaPolicyScope::Scene(rhs)) => lhs.0 == rhs.0,
         (NovaPolicyScope::Agent(lhs), NovaPolicyScope::Agent(rhs)) => lhs.0 == rhs.0,

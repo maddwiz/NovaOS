@@ -4,7 +4,11 @@ pub mod launch;
 pub mod types;
 
 pub use launch::{SCENED_DESCRIPTOR, SCENED_LAUNCH_SPEC};
-pub use types::{SceneBinding, SceneBindingKind, SceneRecord, root_scene};
+pub use types::{
+    ROOT_SCENE_BINDINGS, SceneBinding, SceneBindingKind, SceneCheckpoint, SceneManifest,
+    SceneRecord, SceneRestorePlan, SceneRestoreStatus, restore_scene, root_scene,
+    root_scene_manifest,
+};
 
 #[cfg(test)]
 mod tests;

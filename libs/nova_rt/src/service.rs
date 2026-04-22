@@ -631,6 +631,16 @@ pub enum NovaAppBridgeKind {
     Remote = 3,
 }
 
+impl NovaAppBridgeKind {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Native => "native",
+            Self::Compatibility => "compatibility",
+            Self::Remote => "remote",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u16)]
 pub enum NovaAppActionKind {
@@ -639,6 +649,18 @@ pub enum NovaAppActionKind {
     Focus = 3,
     Close = 4,
     RequestAction = 5,
+}
+
+impl NovaAppActionKind {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Launch => "launch",
+            Self::Open => "open",
+            Self::Focus => "focus",
+            Self::Close => "close",
+            Self::RequestAction => "request-action",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -652,9 +674,10 @@ pub struct NovaAppDescriptor {
 #[cfg(test)]
 mod tests {
     use super::{
-        NovaEndpointId, NovaIntentKind, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest,
-        NovaPolicyScope, NovaSceneMode, NovaServiceBindingState, NovaServiceBootstrapRequirement,
-        NovaServiceId, NovaServiceKernelBinding, NovaServiceKernelLaunchPlan, NovaServiceKind,
+        NovaAppActionKind, NovaAppBridgeKind, NovaEndpointId, NovaIntentKind, NovaPolicyAction,
+        NovaPolicyDecision, NovaPolicyRequest, NovaPolicyScope, NovaSceneMode,
+        NovaServiceBindingState, NovaServiceBootstrapRequirement, NovaServiceId,
+        NovaServiceKernelBinding, NovaServiceKernelLaunchPlan, NovaServiceKind,
         NovaServiceLaunchRequest, NovaServiceLaunchResult, NovaServiceLaunchSpec,
         NovaServiceLaunchStatus, NovaServiceStatus, NovaSharedMemoryRegionId, NovaTaskId,
     };
@@ -681,6 +704,8 @@ mod tests {
         assert_eq!(NovaPolicyDecision::Allow.label(), "allow");
         assert_eq!(NovaIntentKind::RequestStatus.label(), "request-status");
         assert_eq!(NovaSceneMode::Operator.label(), "operator");
+        assert_eq!(NovaAppBridgeKind::Compatibility.label(), "compatibility");
+        assert_eq!(NovaAppActionKind::RequestAction.label(), "request-action");
     }
 
     #[test]

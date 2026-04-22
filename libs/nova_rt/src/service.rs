@@ -573,6 +573,18 @@ pub enum NovaIntentKind {
     Custom = 0xffff,
 }
 
+impl NovaIntentKind {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::LaunchService => "launch-service",
+            Self::OpenApp => "open-app",
+            Self::SwitchScene => "switch-scene",
+            Self::RequestStatus => "request-status",
+            Self::Custom => "custom",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NovaIntentEnvelope {
     pub id: u64,
@@ -589,6 +601,16 @@ pub enum NovaSceneMode {
     Consumer = 1,
     Pro = 2,
     Operator = 3,
+}
+
+impl NovaSceneMode {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Consumer => "consumer",
+            Self::Pro => "pro",
+            Self::Operator => "operator",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -630,9 +652,9 @@ pub struct NovaAppDescriptor {
 #[cfg(test)]
 mod tests {
     use super::{
-        NovaEndpointId, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest, NovaPolicyScope,
-        NovaServiceBindingState, NovaServiceBootstrapRequirement, NovaServiceId,
-        NovaServiceKernelBinding, NovaServiceKernelLaunchPlan, NovaServiceKind,
+        NovaEndpointId, NovaIntentKind, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest,
+        NovaPolicyScope, NovaSceneMode, NovaServiceBindingState, NovaServiceBootstrapRequirement,
+        NovaServiceId, NovaServiceKernelBinding, NovaServiceKernelLaunchPlan, NovaServiceKind,
         NovaServiceLaunchRequest, NovaServiceLaunchResult, NovaServiceLaunchSpec,
         NovaServiceLaunchStatus, NovaServiceStatus, NovaSharedMemoryRegionId, NovaTaskId,
     };
@@ -657,6 +679,8 @@ mod tests {
             "kernel-backed"
         );
         assert_eq!(NovaPolicyDecision::Allow.label(), "allow");
+        assert_eq!(NovaIntentKind::RequestStatus.label(), "request-status");
+        assert_eq!(NovaSceneMode::Operator.label(), "operator");
     }
 
     #[test]

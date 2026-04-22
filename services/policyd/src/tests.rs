@@ -1,4 +1,4 @@
-use crate::{default_policy_matrix, evaluate_policy};
+use crate::{POLICYD_LAUNCH_SPEC, default_policy_matrix, evaluate_policy};
 use nova_rt::{
     NovaAgentId, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest, NovaPolicyScope,
     NovaServiceId,
@@ -17,6 +17,12 @@ fn default_matrix_allows_core_service_launches() {
         default_policy_matrix().decide(request),
         NovaPolicyDecision::Allow
     );
+}
+
+#[test]
+fn launch_spec_identifies_policy_service() {
+    assert_eq!(POLICYD_LAUNCH_SPEC.descriptor.id, NovaServiceId::POLICYD);
+    assert!(POLICYD_LAUNCH_SPEC.is_valid());
 }
 
 #[test]

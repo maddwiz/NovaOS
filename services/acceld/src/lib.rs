@@ -1,6 +1,9 @@
 #![no_std]
 
 pub mod backends;
+pub mod launch;
+
+pub use launch::{ACCELD_DESCRIPTOR, ACCELD_LAUNCH_SPEC};
 
 use nova_fabric::{AccelSeedV1, FabricCapabilityFlags, PlatformClass, QueueClass};
 
@@ -31,8 +34,9 @@ pub fn describe_backend(backend: &dyn AccelBackend) -> BackendDescriptor {
 
 #[cfg(test)]
 mod tests {
-    use super::{AccelBackend, backends, describe_backend};
+    use super::{ACCELD_LAUNCH_SPEC, AccelBackend, backends, describe_backend};
     use nova_fabric::{AccelSeedV1, AccelTopologyHint, AccelTransport, PlatformClass};
+    use nova_rt::NovaServiceId;
 
     #[test]
     fn cpu_backend_is_present_for_all_platforms() {
@@ -53,5 +57,11 @@ mod tests {
 
         seed.transport = AccelTransport::Pci;
         assert!(!backend.supports_seed(&seed));
+    }
+
+    #[test]
+    fn launch_spec_identifies_accel_service() {
+        assert_eq!(ACCELD_LAUNCH_SPEC.descriptor.id, NovaServiceId::ACCELD);
+        assert!(ACCELD_LAUNCH_SPEC.is_valid());
     }
 }

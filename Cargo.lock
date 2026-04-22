@@ -110,6 +110,7 @@ name = "novaos-acceld"
 version = "0.1.0"
 dependencies = [
  "nova_fabric",
+ "nova_rt",
 ]
 
 [[package]]
@@ -131,6 +132,14 @@ name = "novaos-initd"
 version = "0.1.0"
 dependencies = [
  "nova_rt",
+ "novaos-acceld",
+ "novaos-agentd",
+ "novaos-appbridged",
+ "novaos-intentd",
+ "novaos-memd",
+ "novaos-policyd",
+ "novaos-scened",
+ "novaos-shelld",
 ]
 
 [[package]]
@@ -156,6 +165,7 @@ name = "novaos-memd"
 version = "0.1.0"
 dependencies = [
  "nova_fabric",
+ "nova_rt",
 ]
 
 [[package]]

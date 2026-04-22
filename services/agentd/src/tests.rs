@@ -1,6 +1,6 @@
 use crate::{
-    AgentCapabilityBundle, AgentControlEvent, AgentDescriptor, AgentLifecycleState,
-    AgentStateMachine,
+    AGENTD_LAUNCH_SPEC, AgentCapabilityBundle, AgentControlEvent, AgentDescriptor,
+    AgentLifecycleState, AgentStateMachine,
 };
 use nova_rt::{NovaAgentId, NovaServiceId};
 
@@ -23,4 +23,10 @@ fn agent_lifecycle_reaches_running_after_ready() {
 
     assert_eq!(machine.state, AgentLifecycleState::Running);
     assert_eq!(machine.descriptor.capabilities.tool_grants, 2);
+}
+
+#[test]
+fn launch_spec_identifies_agent_service() {
+    assert_eq!(AGENTD_LAUNCH_SPEC.descriptor.id, NovaServiceId::AGENTD);
+    assert!(AGENTD_LAUNCH_SPEC.is_valid());
 }

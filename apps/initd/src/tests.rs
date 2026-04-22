@@ -2,7 +2,21 @@ use crate::{
     core_launch_plan, core_launch_table, initd_boot_snapshot, initd_boot_status_page,
     initd_kernel_launch_plan_page,
 };
-use nova_rt::{NovaServiceBindingState, NovaServiceId, NovaServiceLaunchStatus, NovaServiceState};
+use nova_rt::{
+    NovaServiceBindingState, NovaServiceId, NovaServiceLaunchSpec, NovaServiceLaunchStatus,
+    NovaServiceState,
+};
+
+const SERVICE_OWNED_LAUNCH_SPECS: &[NovaServiceLaunchSpec] = &[
+    novaos_policyd::POLICYD_LAUNCH_SPEC,
+    novaos_agentd::AGENTD_LAUNCH_SPEC,
+    novaos_memd::MEMD_LAUNCH_SPEC,
+    novaos_acceld::ACCELD_LAUNCH_SPEC,
+    novaos_intentd::INTENTD_LAUNCH_SPEC,
+    novaos_scened::SCENED_LAUNCH_SPEC,
+    novaos_appbridged::APPBRIDGED_LAUNCH_SPEC,
+    novaos_shelld::SHELLD_LAUNCH_SPEC,
+];
 
 #[test]
 fn init_launch_table_starts_policy_before_agents_and_intents() {
@@ -66,6 +80,13 @@ fn core_launch_specs_match_static_launch_order() {
     for (index, service) in table.services.iter().enumerate() {
         assert_eq!(service.id, plan.specs[index].descriptor.id);
     }
+}
+
+#[test]
+fn core_launch_specs_are_service_owned() {
+    let plan = core_launch_plan();
+
+    assert_eq!(plan.specs, SERVICE_OWNED_LAUNCH_SPECS);
 }
 
 #[test]

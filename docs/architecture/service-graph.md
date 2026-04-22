@@ -34,7 +34,7 @@ This service graph is an additive runtime layer inside the existing M0-M17 roadm
 - `NovaServiceKernelBinding` names the future task, control endpoint, shared-memory region, binding state, and health generation for a service.
 - `NovaServiceKernelLaunchPlan` ties the descriptor, launch request, and future kernel binding together.
 
-`apps/initd` publishes static launch specs for the first service chain and a deterministic kernel-binding plan for required services. Optional `shelld` remains model-only until an operator shell boundary is requested.
+Each service crate exports its own descriptor and launch spec. `apps/initd` assembles those service-owned specs into the first runtime manifest and publishes a deterministic kernel-binding plan for required services. Optional `shelld` remains model-only until an operator shell boundary is requested.
 
 This step does not allocate syscall numbers, does not modify `kernel/**`, and does not change boot handoff behavior.
 

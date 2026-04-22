@@ -283,6 +283,21 @@ impl NovaServiceBootstrapRequirement {
         }
     }
 
+    pub const fn core_required() -> Self {
+        Self::new(
+            NovaInitCapsuleCapabilityV1::BootLog as u64
+                | NovaInitCapsuleCapabilityV1::Yield as u64
+                | NovaInitCapsuleCapabilityV1::EndpointBootstrap as u64
+                | NovaInitCapsuleCapabilityV1::SharedMemoryBootstrap as u64,
+            1,
+            1,
+        )
+    }
+
+    pub const fn boot_log_only() -> Self {
+        Self::new(NovaInitCapsuleCapabilityV1::BootLog as u64, 0, 0)
+    }
+
     pub const fn is_valid(self) -> bool {
         let known_caps =
             (self.requested_capabilities & !NOVA_INIT_CAPSULE_KNOWN_CAPABILITIES_V1) == 0;
@@ -593,6 +608,17 @@ mod tests {
         );
 
         assert!(!spec.is_valid());
+    }
+
+    #[test]
+    fn service_bootstrap_requirement_presets_are_valid() {
+        let required = NovaServiceBootstrapRequirement::core_required();
+        let boot_log_only = NovaServiceBootstrapRequirement::boot_log_only();
+
+        assert!(required.is_valid());
+        assert!(boot_log_only.is_valid());
+        assert_eq!(required.endpoint_slots, 1);
+        assert_eq!(boot_log_only.endpoint_slots, 0);
     }
 
     #[test]

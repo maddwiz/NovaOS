@@ -1,61 +1,16 @@
 use nova_rt::{
-    NovaEndpointId, NovaInitCapsuleCapabilityV1, NovaSceneId, NovaServiceBootstrapRequirement,
-    NovaServiceDescriptor, NovaServiceId, NovaServiceKernelBinding, NovaServiceKernelLaunchPlan,
-    NovaServiceKind, NovaServiceLaunchRequest, NovaServiceLaunchSpec, NovaServiceStatus,
-    NovaSharedMemoryRegionId, NovaTaskId,
+    NovaEndpointId, NovaSceneId, NovaServiceDescriptor, NovaServiceId, NovaServiceKernelBinding,
+    NovaServiceKernelLaunchPlan, NovaServiceKind, NovaServiceLaunchRequest, NovaServiceLaunchSpec,
+    NovaServiceStatus, NovaSharedMemoryRegionId, NovaTaskId,
 };
-
-pub const POLICYD_DESCRIPTOR: NovaServiceDescriptor = NovaServiceDescriptor::new(
-    NovaServiceId::POLICYD,
-    "policyd",
-    NovaServiceKind::Core,
-    true,
-    10,
-);
-pub const AGENTD_DESCRIPTOR: NovaServiceDescriptor = NovaServiceDescriptor::new(
-    NovaServiceId::AGENTD,
-    "agentd",
-    NovaServiceKind::Core,
-    true,
-    20,
-);
-pub const MEMD_DESCRIPTOR: NovaServiceDescriptor =
-    NovaServiceDescriptor::new(NovaServiceId::MEMD, "memd", NovaServiceKind::Core, true, 30);
-pub const ACCELD_DESCRIPTOR: NovaServiceDescriptor = NovaServiceDescriptor::new(
-    NovaServiceId::ACCELD,
-    "acceld",
-    NovaServiceKind::Core,
-    true,
-    40,
-);
-pub const INTENTD_DESCRIPTOR: NovaServiceDescriptor = NovaServiceDescriptor::new(
-    NovaServiceId::INTENTD,
-    "intentd",
-    NovaServiceKind::Interaction,
-    true,
-    50,
-);
-pub const SCENED_DESCRIPTOR: NovaServiceDescriptor = NovaServiceDescriptor::new(
-    NovaServiceId::SCENED,
-    "scened",
-    NovaServiceKind::Interaction,
-    true,
-    60,
-);
-pub const APPBRIDGED_DESCRIPTOR: NovaServiceDescriptor = NovaServiceDescriptor::new(
-    NovaServiceId::APPBRIDGED,
-    "appbridged",
-    NovaServiceKind::Bridge,
-    true,
-    70,
-);
-pub const SHELLD_DESCRIPTOR: NovaServiceDescriptor = NovaServiceDescriptor::new(
-    NovaServiceId::SHELLD,
-    "shelld",
-    NovaServiceKind::Operator,
-    false,
-    80,
-);
+pub use novaos_acceld::{ACCELD_DESCRIPTOR, ACCELD_LAUNCH_SPEC};
+pub use novaos_agentd::{AGENTD_DESCRIPTOR, AGENTD_LAUNCH_SPEC};
+pub use novaos_appbridged::{APPBRIDGED_DESCRIPTOR, APPBRIDGED_LAUNCH_SPEC};
+pub use novaos_intentd::{INTENTD_DESCRIPTOR, INTENTD_LAUNCH_SPEC};
+pub use novaos_memd::{MEMD_DESCRIPTOR, MEMD_LAUNCH_SPEC};
+pub use novaos_policyd::{POLICYD_DESCRIPTOR, POLICYD_LAUNCH_SPEC};
+pub use novaos_scened::{SCENED_DESCRIPTOR, SCENED_LAUNCH_SPEC};
+pub use novaos_shelld::{SHELLD_DESCRIPTOR, SHELLD_LAUNCH_SPEC};
 
 pub const CORE_SERVICE_LAUNCH_ORDER: &[NovaServiceDescriptor] = &[
     POLICYD_DESCRIPTOR,
@@ -79,26 +34,15 @@ pub const CORE_SERVICE_BOOT_STATUSES: &[NovaServiceStatus] = &[
     NovaServiceStatus::deferred(SHELLD_DESCRIPTOR, 1),
 ];
 
-const REQUIRED_SERVICE_CAPS: u64 = NovaInitCapsuleCapabilityV1::BootLog as u64
-    | NovaInitCapsuleCapabilityV1::Yield as u64
-    | NovaInitCapsuleCapabilityV1::EndpointBootstrap as u64
-    | NovaInitCapsuleCapabilityV1::SharedMemoryBootstrap as u64;
-const OPTIONAL_SERVICE_CAPS: u64 = NovaInitCapsuleCapabilityV1::BootLog as u64;
-
-const REQUIRED_SERVICE_BOOTSTRAP: NovaServiceBootstrapRequirement =
-    NovaServiceBootstrapRequirement::new(REQUIRED_SERVICE_CAPS, 1, 1);
-const OPTIONAL_SERVICE_BOOTSTRAP: NovaServiceBootstrapRequirement =
-    NovaServiceBootstrapRequirement::new(OPTIONAL_SERVICE_CAPS, 0, 0);
-
 pub const CORE_SERVICE_LAUNCH_SPECS: &[NovaServiceLaunchSpec] = &[
-    NovaServiceLaunchSpec::new(POLICYD_DESCRIPTOR, REQUIRED_SERVICE_BOOTSTRAP),
-    NovaServiceLaunchSpec::new(AGENTD_DESCRIPTOR, REQUIRED_SERVICE_BOOTSTRAP),
-    NovaServiceLaunchSpec::new(MEMD_DESCRIPTOR, REQUIRED_SERVICE_BOOTSTRAP),
-    NovaServiceLaunchSpec::new(ACCELD_DESCRIPTOR, REQUIRED_SERVICE_BOOTSTRAP),
-    NovaServiceLaunchSpec::new(INTENTD_DESCRIPTOR, REQUIRED_SERVICE_BOOTSTRAP),
-    NovaServiceLaunchSpec::new(SCENED_DESCRIPTOR, REQUIRED_SERVICE_BOOTSTRAP),
-    NovaServiceLaunchSpec::new(APPBRIDGED_DESCRIPTOR, REQUIRED_SERVICE_BOOTSTRAP),
-    NovaServiceLaunchSpec::new(SHELLD_DESCRIPTOR, OPTIONAL_SERVICE_BOOTSTRAP),
+    POLICYD_LAUNCH_SPEC,
+    AGENTD_LAUNCH_SPEC,
+    MEMD_LAUNCH_SPEC,
+    ACCELD_LAUNCH_SPEC,
+    INTENTD_LAUNCH_SPEC,
+    SCENED_LAUNCH_SPEC,
+    APPBRIDGED_LAUNCH_SPEC,
+    SHELLD_LAUNCH_SPEC,
 ];
 
 const POLICYD_KERNEL_BINDING: NovaServiceKernelBinding = NovaServiceKernelBinding::planned(

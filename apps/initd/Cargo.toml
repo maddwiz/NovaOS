@@ -22,3 +22,11 @@ bootstrap_el0_probe = []
 
 [dependencies]
 nova_rt = { path = "../../libs/nova_rt" }
+novaos-acceld = { path = "../../services/acceld" }
+novaos-agentd = { path = "../../services/agentd" }
+novaos-appbridged = { path = "../../services/appbridged" }
+novaos-intentd = { path = "../../services/intentd" }
+novaos-memd = { path = "../../services/memd" }
+novaos-policyd = { path = "../../services/policyd" }
+novaos-scened = { path = "../../services/scened" }
+novaos-shelld = { path = "../../services/shelld" }

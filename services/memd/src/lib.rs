@@ -1,6 +1,9 @@
 #![no_std]
 
+pub mod launch;
 pub mod profiles;
+
+pub use launch::{MEMD_DESCRIPTOR, MEMD_LAUNCH_SPEC};
 
 use nova_fabric::{MemoryPoolKind, MemoryTopologyClass, PlatformClass};
 
@@ -13,8 +16,9 @@ pub trait MemoryProfile {
 
 #[cfg(test)]
 mod tests {
-    use super::{MemoryProfile, profiles};
+    use super::{MEMD_LAUNCH_SPEC, MemoryProfile, profiles};
     use nova_fabric::{MemoryPoolKind, MemoryTopologyClass, PlatformClass};
+    use nova_rt::NovaServiceId;
 
     #[test]
     fn uma_profile_is_spark_focused() {
@@ -37,5 +41,11 @@ mod tests {
                 .supported_pools()
                 .contains(&MemoryPoolKind::PartitionLocal)
         );
+    }
+
+    #[test]
+    fn launch_spec_identifies_memory_service() {
+        assert_eq!(MEMD_LAUNCH_SPEC.descriptor.id, NovaServiceId::MEMD);
+        assert!(MEMD_LAUNCH_SPEC.is_valid());
     }
 }

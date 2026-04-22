@@ -11,15 +11,16 @@ pub mod arch;
 pub mod boot_contract;
 pub mod bootinfo;
 pub mod bootstrap;
+pub mod bringup;
 pub mod console;
 pub mod diag;
 pub mod el;
+pub mod exception_runtime;
 pub mod mm;
 pub mod panic;
 pub mod syscall;
 pub mod trace;
 
-use arch::arm64::exceptions::ExceptionVectors;
 pub use boot_contract::{
     BootstrapCapsuleSummary, BootstrapTaskLaunchPlan, KernelBringupState, KernelBringupV2State,
     prepare_bringup, resolve_boot_info, resolve_boot_info_v2, resolve_kernel_image_digest,
@@ -28,20 +29,8 @@ pub use boot_contract::{
 use bootinfo::{NovaBootInfoV1, NovaBootInfoV2};
 #[cfg(test)]
 use bootinfo::{NovaImageDigestV1, NovaVerificationInfoV1};
-use console::{BootConsole, ConsoleSink};
-#[cfg(all(
-    target_os = "none",
-    target_arch = "aarch64",
-    feature = "bootstrap_trap_vector_trace"
-))]
-use diag::log_bootstrap_exception_install_status;
-#[cfg(all(
-    target_os = "none",
-    target_arch = "aarch64",
-    feature = "bootstrap_kernel_svc_probe"
-))]
-use diag::run_bootstrap_kernel_svc_probe;
-use diag::run_syscall_probe;
+use bringup::enter_kernel_runtime;
+pub use bringup::{KernelContext, kernel_main};
 pub(crate) use diag::trace_kernel_stage0_marker;
 #[cfg(test)]
 use el::{
@@ -49,88 +38,6 @@ use el::{
     bootstrap_task_boundary_plan, bootstrap_task_target_boundary_plan,
     bootstrap_task_transfer_mode,
 };
-
-use nova_rt::NovaInitCapsuleCapabilityV1;
-use syscall::{CurrentTaskState, SyscallDispatchState, install_bootstrap_syscall_state};
-
-pub struct KernelContext<'a, C: ConsoleSink> {
-    pub boot_info: &'a NovaBootInfoV1,
-    pub boot_info_v2: Option<&'a NovaBootInfoV2>,
-    pub bringup: Option<KernelBringupState>,
-    pub console: &'a mut C,
-}
-
-pub fn kernel_main<C: ConsoleSink>(context: KernelContext<'_, C>) -> ! {
-    context
-        .console
-        .log(console::LogLevel::Info, "NovaOS kernel bring-up");
-
-    if !context.boot_info.is_valid() {
-        context
-            .console
-            .log(console::LogLevel::Warn, "boot info marker is not set");
-    }
-
-    let summary = context
-        .bringup
-        .map(|bringup| bringup.boot_summary)
-        .unwrap_or_else(|| context.boot_info.summary());
-    context
-        .console
-        .log(console::LogLevel::Info, summary.describe());
-
-    if context.boot_info_v2.is_some() {
-        context
-            .console
-            .log(console::LogLevel::Info, "boot info v2 summary observed");
-    }
-
-    let bringup = context.bringup.unwrap_or_else(|| {
-        prepare_bringup(context.boot_info, context.boot_info_v2)
-            .unwrap_or_else(KernelBringupState::empty)
-    });
-    let vectors = bringup.exception_vectors;
-    let _page_tables = bringup.page_tables;
-    let _allocator = bringup.allocator;
-
-    if let Some(init_capsule) = bringup.init_capsule {
-        log_init_capsule_summary(context.console, init_capsule);
-    }
-
-    let bootstrap_syscall_state = bootstrap_syscall_dispatch_state(bringup.init_capsule);
-    run_syscall_probe(context.console, bootstrap_syscall_state);
-    install_bootstrap_exception_runtime(vectors, bootstrap_syscall_state);
-    #[cfg(all(
-        target_os = "none",
-        target_arch = "aarch64",
-        feature = "bootstrap_kernel_svc_probe"
-    ))]
-    run_bootstrap_kernel_svc_probe();
-
-    #[cfg(not(all(
-        target_os = "none",
-        target_arch = "aarch64",
-        feature = "bootstrap_kernel_svc_probe"
-    )))]
-    {
-        let bootstrap_launch_plan = bringup
-            .init_capsule
-            .and_then(|init_capsule| init_capsule.launch_plan());
-        if let Some(launch_plan) = bootstrap_launch_plan {
-            context.console.write_str("[info] bootstrap task transfer ");
-            context.console.write_line(launch_plan.service_name());
-            bootstrap::enter_bootstrap_task(
-                context.console,
-                launch_plan,
-                bringup.init_capsule,
-                bringup.page_tables,
-                bringup.allocator,
-            );
-        }
-    }
-
-    panic::log_and_halt(context.console, "kernel bring-up remains a scaffold");
-}
 
 pub fn kernel_entry(boot_info: *const NovaBootInfoV1) -> ! {
     let Some(boot_info) = resolve_boot_info(boot_info) else {
@@ -168,97 +75,21 @@ pub fn kernel_identity() -> &'static str {
     "NovaOS kernel"
 }
 
-fn enter_kernel_runtime(
-    boot_info: &'static NovaBootInfoV1,
-    boot_info_v2: Option<&'static NovaBootInfoV2>,
-    bringup: Option<KernelBringupState>,
-) -> ! {
-    let mut console = BootConsole::from_boot_info(boot_info);
-    kernel_main(KernelContext {
-        boot_info,
-        boot_info_v2,
-        bringup,
-        console: &mut console,
-    })
-}
-
-fn install_bootstrap_exception_runtime(
-    vectors: ExceptionVectors,
-    bootstrap_syscall_state: SyscallDispatchState,
-) {
-    install_bootstrap_syscall_state(bootstrap_syscall_state);
-    let _installed_vectors = unsafe { vectors.install() };
-    #[cfg(all(
-        target_os = "none",
-        target_arch = "aarch64",
-        feature = "bootstrap_trap_vector_trace"
-    ))]
-    log_bootstrap_exception_install_status(vectors, _installed_vectors);
-}
-
-fn log_init_capsule_summary<C: ConsoleSink>(
-    console: &mut C,
-    init_capsule: BootstrapCapsuleSummary,
-) {
-    console.log(console::LogLevel::Info, "init capsule summary observed");
-    console.write_str("[info] init capsule service ");
-    console.write_line(init_capsule.service_name());
-    console.write_str("[info] bootstrap task current ");
-    console.write_line(init_capsule.service_name());
-    if init_capsule.payload_body_present {
-        console.log(console::LogLevel::Info, "bootstrap task image observed");
-    }
-    if let Some(launch_plan) = init_capsule.launch_plan() {
-        let _ = launch_plan;
-        if init_capsule.payload_descriptor_from_boot_info_v2 {
-            console.log(
-                console::LogLevel::Info,
-                "bootstrap task launch plan from bootinfo_v2",
-            );
-        } else if init_capsule.payload_body_present {
-            console.log(console::LogLevel::Info, "bootstrap task image staged");
-        }
-    } else if init_capsule.payload_body_present {
-        console.log(console::LogLevel::Info, "bootstrap task image staged");
-    }
-}
-
-fn bootstrap_syscall_dispatch_state(
-    init_capsule: Option<BootstrapCapsuleSummary>,
-) -> SyscallDispatchState {
-    init_capsule
-        .map(|init_capsule| {
-            let task_state = init_capsule.task_state();
-            let endpoints_ready = task_state
-                .has_bootstrap_capability(NovaInitCapsuleCapabilityV1::EndpointBootstrap)
-                && task_state.endpoint_slots != 0;
-            let shared_memory_ready = task_state
-                .has_bootstrap_capability(NovaInitCapsuleCapabilityV1::SharedMemoryBootstrap)
-                && task_state.shared_memory_regions != 0;
-            SyscallDispatchState::bootstrap(
-                CurrentTaskState::new(init_capsule.service_name, task_state),
-                endpoints_ready,
-                shared_memory_ready,
-            )
-        })
-        .unwrap_or_else(SyscallDispatchState::scaffold)
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
         BootstrapCapsuleSummary, BootstrapTaskBoundaryPlan, BootstrapTaskLaunchPlan,
         BootstrapTaskSyscallBoundary, BootstrapTaskTransferMode, NovaBootInfoV1, NovaBootInfoV2,
-        NovaImageDigestV1, NovaVerificationInfoV1, bootstrap_syscall_dispatch_state,
-        bootstrap_task_boundary_plan, bootstrap_task_target_boundary_plan,
-        bootstrap_task_transfer_mode, prepare_bringup, resolve_boot_info, resolve_boot_info_v2,
-        resolve_kernel_image_digest, resolve_memory_map, resolve_optional_boot_info_v2,
-        resolve_verification_info,
+        NovaImageDigestV1, NovaVerificationInfoV1, bootstrap_task_boundary_plan,
+        bootstrap_task_target_boundary_plan, bootstrap_task_transfer_mode, prepare_bringup,
+        resolve_boot_info, resolve_boot_info_v2, resolve_kernel_image_digest, resolve_memory_map,
+        resolve_optional_boot_info_v2, resolve_verification_info,
     };
     use crate::bootinfo::{BootSource, FramebufferFormat, NovaBootstrapFrameArenaDescriptorV1};
     use crate::bootstrap::dispatch_bootstrap_kernel_call;
     use crate::console::ConsoleSink;
     use crate::diag::run_lower_el_bootstrap_svc_dry_run;
+    use crate::exception_runtime::bootstrap_syscall_dispatch_state;
     use crate::syscall::{
         BootstrapTaskState, CurrentTaskState, SyscallDispatchState, install_bootstrap_syscall_state,
     };

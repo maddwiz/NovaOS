@@ -1,4 +1,7 @@
-use crate::{POLICYD_LAUNCH_SPEC, default_policy_matrix, evaluate_policy};
+use crate::{
+    POLICY_AUDIT_NO_RULE, POLICYD_LAUNCH_SPEC, PolicyDecisionSource, default_policy_matrix,
+    evaluate_policy, evaluate_policy_with_audit,
+};
 use nova_rt::{
     NovaAgentId, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest, NovaPolicyScope,
     NovaSceneId, NovaServiceId,
@@ -32,6 +35,61 @@ fn default_matrix_denies_unknown_service_launches() {
 }
 
 #[test]
+fn audit_record_tracks_rule_backed_decision() {
+    let request = NovaPolicyRequest {
+        subject_service: NovaServiceId::INITD,
+        subject_agent: NovaAgentId::INIT,
+        action: NovaPolicyAction::LaunchService,
+        scope: NovaPolicyScope::Service(NovaServiceId::POLICYD),
+    };
+
+    let audit = evaluate_policy_with_audit(request, 7);
+
+    assert_eq!(audit.sequence, 7);
+    assert_eq!(audit.decision, NovaPolicyDecision::Allow);
+    assert_eq!(audit.source, PolicyDecisionSource::MatrixRule);
+    assert_eq!(audit.matched_rule_index, 0);
+    assert!(audit.matched_rule());
+    assert!(audit.allowed());
+}
+
+#[test]
+fn audit_record_tracks_default_denial() {
+    let request = NovaPolicyRequest {
+        subject_service: NovaServiceId::INITD,
+        subject_agent: NovaAgentId::INIT,
+        action: NovaPolicyAction::StopService,
+        scope: NovaPolicyScope::Service(NovaServiceId::new(0x9999)),
+    };
+
+    let audit = evaluate_policy_with_audit(request, 9);
+
+    assert_eq!(audit.decision, NovaPolicyDecision::Deny);
+    assert_eq!(audit.source, PolicyDecisionSource::MatrixDefault);
+    assert_eq!(audit.matched_rule_index, POLICY_AUDIT_NO_RULE);
+    assert!(!audit.matched_rule());
+    assert!(!audit.allowed());
+    assert!(!audit.requires_approval());
+}
+
+#[test]
+fn audit_record_tracks_self_policy_override() {
+    let request = NovaPolicyRequest {
+        subject_service: NovaServiceId::POLICYD,
+        subject_agent: NovaAgentId::INIT,
+        action: NovaPolicyAction::AccessMemory,
+        scope: NovaPolicyScope::System,
+    };
+
+    let audit = evaluate_policy_with_audit(request, 11);
+
+    assert_eq!(audit.decision, NovaPolicyDecision::Allow);
+    assert_eq!(audit.source, PolicyDecisionSource::PolicydSelf);
+    assert_eq!(audit.source.label(), "policyd-self");
+    assert_eq!(audit.matched_rule_index, POLICY_AUDIT_NO_RULE);
+}
+
+#[test]
 fn launch_spec_identifies_policy_service() {
     assert_eq!(POLICYD_LAUNCH_SPEC.descriptor.id, NovaServiceId::POLICYD);
     assert!(POLICYD_LAUNCH_SPEC.is_valid());
@@ -47,6 +105,7 @@ fn default_matrix_asks_before_agent_or_app_actions() {
     };
 
     assert_eq!(evaluate_policy(request), NovaPolicyDecision::Ask);
+    assert!(evaluate_policy_with_audit(request, 12).requires_approval());
 }
 
 #[test]

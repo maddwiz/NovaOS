@@ -43,12 +43,116 @@ impl PolicyMatrix {
     }
 
     pub fn decide(self, request: NovaPolicyRequest) -> NovaPolicyDecision {
+        self.decide_with_audit(request, 0).decision
+    }
+
+    pub fn decide_with_audit(self, request: NovaPolicyRequest, sequence: u64) -> PolicyAuditRecord {
+        let mut rule_index = 0;
         for rule in self.rules {
             if rule.matches(request) {
-                return rule.decision;
+                return PolicyAuditRecord::from_rule(sequence, request, rule.decision, rule_index);
             }
+            rule_index = rule_index.saturating_add(1);
         }
-        self.default_decision
+        PolicyAuditRecord::from_default(sequence, request, self.default_decision)
+    }
+}
+
+pub const POLICY_AUDIT_NO_RULE: u16 = u16::MAX;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u16)]
+pub enum PolicyDecisionSource {
+    PolicydSelf = 1,
+    MatrixRule = 2,
+    MatrixDefault = 3,
+}
+
+impl PolicyDecisionSource {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::PolicydSelf => "policyd-self",
+            Self::MatrixRule => "matrix-rule",
+            Self::MatrixDefault => "matrix-default",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PolicyAuditRecord {
+    pub sequence: u64,
+    pub request: NovaPolicyRequest,
+    pub decision: NovaPolicyDecision,
+    pub source: PolicyDecisionSource,
+    pub matched_rule_index: u16,
+}
+
+impl PolicyAuditRecord {
+    pub const fn new(
+        sequence: u64,
+        request: NovaPolicyRequest,
+        decision: NovaPolicyDecision,
+        source: PolicyDecisionSource,
+        matched_rule_index: u16,
+    ) -> Self {
+        Self {
+            sequence,
+            request,
+            decision,
+            source,
+            matched_rule_index,
+        }
+    }
+
+    pub const fn from_self_policy(sequence: u64, request: NovaPolicyRequest) -> Self {
+        Self::new(
+            sequence,
+            request,
+            NovaPolicyDecision::Allow,
+            PolicyDecisionSource::PolicydSelf,
+            POLICY_AUDIT_NO_RULE,
+        )
+    }
+
+    pub const fn from_rule(
+        sequence: u64,
+        request: NovaPolicyRequest,
+        decision: NovaPolicyDecision,
+        matched_rule_index: u16,
+    ) -> Self {
+        Self::new(
+            sequence,
+            request,
+            decision,
+            PolicyDecisionSource::MatrixRule,
+            matched_rule_index,
+        )
+    }
+
+    pub const fn from_default(
+        sequence: u64,
+        request: NovaPolicyRequest,
+        decision: NovaPolicyDecision,
+    ) -> Self {
+        Self::new(
+            sequence,
+            request,
+            decision,
+            PolicyDecisionSource::MatrixDefault,
+            POLICY_AUDIT_NO_RULE,
+        )
+    }
+
+    pub const fn matched_rule(self) -> bool {
+        self.matched_rule_index != POLICY_AUDIT_NO_RULE
+    }
+
+    pub const fn allowed(self) -> bool {
+        matches!(self.decision, NovaPolicyDecision::Allow)
+    }
+
+    pub const fn requires_approval(self) -> bool {
+        matches!(self.decision, NovaPolicyDecision::Ask)
     }
 }
 
@@ -120,11 +224,15 @@ pub const fn default_policy_matrix() -> PolicyMatrix {
 }
 
 pub fn evaluate_policy(request: NovaPolicyRequest) -> NovaPolicyDecision {
+    evaluate_policy_with_audit(request, 0).decision
+}
+
+pub fn evaluate_policy_with_audit(request: NovaPolicyRequest, sequence: u64) -> PolicyAuditRecord {
     if request.subject_service == NovaServiceId::POLICYD {
-        return NovaPolicyDecision::Allow;
+        return PolicyAuditRecord::from_self_policy(sequence, request);
     }
 
-    default_policy_matrix().decide(request)
+    default_policy_matrix().decide_with_audit(request, sequence)
 }
 
 const fn policy_scope_matches(rule_scope: NovaPolicyScope, request_scope: NovaPolicyScope) -> bool {

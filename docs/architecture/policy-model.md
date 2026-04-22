@@ -8,6 +8,7 @@
 - `libs/nova_rt::NovaPolicyAction`: launch service, stop service, route intent, access memory, app action, and delegate to agent.
 - `libs/nova_rt::NovaPolicyScope`: system, service, scene, agent, or app.
 - `services/policyd` owns the first hardcoded decision matrix.
+- `services/policyd` returns a typed audit record for evaluated policy requests, including the request, decision, decision source, matched rule index when present, and caller-provided sequence.
 - `apps/initd` evaluates each service launch in its runtime report through the `policyd` matrix before reporting the launch as policy-allowed.
 - `services/intentd` projects each intent into a scene-scoped `RouteIntent` policy request before routing.
 
@@ -18,4 +19,4 @@
 - Memory visibility defaults to deny.
 - System-scoped rules act as global defaults for the same action, so scene-scoped route requests inherit the ask-before-action rule.
 
-The first matrix is intentionally conservative and static. Dynamic policy loading, audit persistence, and user approval UX are future service-layer work.
+The first matrix is intentionally conservative and static. Audit records are currently in-memory evaluation results only. Dynamic policy loading, audit persistence, and user approval UX are future service-layer work.

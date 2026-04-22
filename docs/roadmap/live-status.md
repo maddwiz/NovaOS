@@ -15,9 +15,9 @@ Report links below point to local runtime artifacts; run `make report` if they a
 
 - active_phase: M0 portability refactor + runtime spine with Spark boot continuity
 - repo_root: /home/nova/NovaOS
-- latest_report_generated_at_utc: 20260422T000400Z
-- latest_loop_timestamp_utc: 20260421T235732Z
-- latest_loop_iteration: 5433
+- latest_report_generated_at_utc: 20260422T000957Z
+- latest_loop_timestamp_utc: 20260422T000929Z
+- latest_loop_iteration: 5435
 
 ## Durable Baseline
 
@@ -71,10 +71,10 @@ Report links below point to local runtime artifacts; run `make report` if they a
 - bootstrap_el0_diagnostic_status: svc_returned_to_el0_spin
 - bootstrap_svc_diagnostic_status: returned
 - bootstrap_trap_diagnostic_status: returned
-- latest_report: /home/nova/NovaOS/artifacts/reports/novaos-report-20260422T000400Z.md
-- latest_loop_log: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260421T235732Z.log
-- latest_loop_summary: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260421T235732Z.summary
-- latest_bootstrap_kernel_svc_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-kernel-svc-diagnostic-20260418T151843Z.log
+- latest_report: /home/nova/NovaOS/artifacts/reports/novaos-report-20260422T000957Z.md
+- latest_loop_log: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260422T000929Z.log
+- latest_loop_summary: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260422T000929Z.summary
+- latest_bootstrap_kernel_svc_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-kernel-svc-diagnostic-20260422T000906Z.log
 - latest_bootstrap_pretransfer_svc_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-pretransfer-svc-diagnostic-20260418T151905Z.log
 - latest_bootstrap_el0_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-el0-diagnostic-20260421T142322Z.log
 - latest_bootstrap_svc_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-svc-diagnostic-20260418T151905Z.log

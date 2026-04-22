@@ -118,7 +118,7 @@ Report links below point to local runtime artifacts; run \`make report\` if they
 - the persisted observatory report still needs real Spark capture and comparison against the QEMU baseline
 - real Spark hardware acceptance is still missing for the observatory, loader, and kernel milestones because the actual operator/root/reboot flow still has to happen on hardware, and the loader milestone still needs both the returned handoff report and stage0 -> stage1 -> kernel evidence from hardware
 - x86_64, PCI, RTX, and Hopper lanes are placeholders only; no second hardware lane boots yet
-- the service graph is still a typed local runtime model; real kernel task creation, endpoint wiring, shared-memory grants, and service health publication are not integrated yet
+- the service graph is still a typed local runtime model; \`initd\` now publishes a typed local boot status page for the first service chain, but real kernel task creation, endpoint wiring, shared-memory grants, and kernel-backed service health publication are not integrated yet
 - timer, IRQ, topology, capability, endpoint routing beyond the first reserved bootstrap slot, shared-memory policy beyond the first reserved bootstrap region, a real EL0 syscall boundary, storage, shell, update, CPU inference, topology-aware \`memd\`, and native accelerator work are still ahead
 
 ## Latest Automation Status

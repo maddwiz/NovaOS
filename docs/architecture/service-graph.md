@@ -24,6 +24,8 @@ This service graph is an additive runtime layer inside the existing M0-M17 roadm
 - `appbridged`
 - optional `shelld`
 
-The shared IDs, descriptors, launch requests, launch results, policy decisions, intent envelopes, scene IDs, app IDs, and agent IDs live in `libs/nova_rt::service`.
+`apps/initd` also publishes a static boot status page for that first runtime spine. Required services are reported as started/running, while optional `shelld` is reported as deferred until an operator shell boundary is needed.
 
-This is still a local model, not a true process launch graph. Real kernel task creation, endpoint wiring, and shared-memory grants remain future integration work.
+The shared IDs, descriptors, service statuses, launch requests, launch results, policy decisions, intent envelopes, scene IDs, app IDs, and agent IDs live in `libs/nova_rt::service`.
+
+This is still a local model, not a true process launch graph. Real kernel task creation, endpoint wiring, shared-memory grants, and kernel-backed service health publication remain future integration work.

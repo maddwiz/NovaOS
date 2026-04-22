@@ -109,7 +109,44 @@ impl NovaServiceDescriptor {
 pub struct NovaServiceStatus {
     pub descriptor: NovaServiceDescriptor,
     pub state: NovaServiceState,
-    pub last_result: NovaServiceLaunchStatus,
+    pub last_result: NovaServiceLaunchResult,
+}
+
+impl NovaServiceStatus {
+    pub const fn new(
+        descriptor: NovaServiceDescriptor,
+        state: NovaServiceState,
+        last_result: NovaServiceLaunchResult,
+    ) -> Self {
+        Self {
+            descriptor,
+            state,
+            last_result,
+        }
+    }
+
+    pub const fn running(descriptor: NovaServiceDescriptor) -> Self {
+        Self::new(
+            descriptor,
+            NovaServiceState::Running,
+            NovaServiceLaunchResult::started(descriptor.id),
+        )
+    }
+
+    pub const fn deferred(descriptor: NovaServiceDescriptor, detail: u64) -> Self {
+        Self::new(
+            descriptor,
+            NovaServiceState::NotStarted,
+            NovaServiceLaunchResult::deferred(descriptor.id, detail),
+        )
+    }
+
+    pub const fn is_healthy(self) -> bool {
+        matches!(
+            self.state,
+            NovaServiceState::Running | NovaServiceState::Degraded
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -139,12 +176,20 @@ pub struct NovaServiceLaunchResult {
 }
 
 impl NovaServiceLaunchResult {
-    pub const fn started(target: NovaServiceId) -> Self {
+    pub const fn new(target: NovaServiceId, status: NovaServiceLaunchStatus, detail: u64) -> Self {
         Self {
             target,
-            status: NovaServiceLaunchStatus::Started,
-            detail: 0,
+            status,
+            detail,
         }
+    }
+
+    pub const fn started(target: NovaServiceId) -> Self {
+        Self::new(target, NovaServiceLaunchStatus::Started, 0)
+    }
+
+    pub const fn deferred(target: NovaServiceId, detail: u64) -> Self {
+        Self::new(target, NovaServiceLaunchStatus::Deferred, detail)
     }
 }
 
@@ -251,7 +296,7 @@ pub struct NovaAppDescriptor {
 mod tests {
     use super::{
         NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest, NovaPolicyScope, NovaServiceId,
-        NovaServiceKind, NovaServiceLaunchResult, NovaServiceLaunchStatus,
+        NovaServiceKind, NovaServiceLaunchResult, NovaServiceLaunchStatus, NovaServiceStatus,
     };
 
     #[test]
@@ -266,6 +311,27 @@ mod tests {
         let result = NovaServiceLaunchResult::started(NovaServiceId::POLICYD);
         assert_eq!(result.target, NovaServiceId::POLICYD);
         assert_eq!(result.status, NovaServiceLaunchStatus::Started);
+    }
+
+    #[test]
+    fn service_status_tracks_health_from_launch_result() {
+        let descriptor = super::NovaServiceDescriptor::new(
+            NovaServiceId::INTENTD,
+            "intentd",
+            NovaServiceKind::Interaction,
+            true,
+            50,
+        );
+        let running = NovaServiceStatus::running(descriptor);
+        let deferred = NovaServiceStatus::deferred(descriptor, 7);
+
+        assert!(running.is_healthy());
+        assert!(!deferred.is_healthy());
+        assert_eq!(
+            deferred.last_result.status,
+            NovaServiceLaunchStatus::Deferred
+        );
+        assert_eq!(deferred.last_result.detail, 7);
     }
 
     #[test]

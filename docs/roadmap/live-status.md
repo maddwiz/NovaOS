@@ -15,9 +15,9 @@ Report links below point to local runtime artifacts; run `make report` if they a
 
 - active_phase: M0 portability refactor + runtime spine with Spark boot continuity
 - repo_root: /home/nova/NovaOS
-- latest_report_generated_at_utc: 20260421T223351Z
-- latest_loop_timestamp_utc: 20260421T222934Z
-- latest_loop_iteration: 5418
+- latest_report_generated_at_utc: 20260422T000400Z
+- latest_loop_timestamp_utc: 20260421T235732Z
+- latest_loop_iteration: 5433
 
 ## Durable Baseline
 
@@ -54,7 +54,7 @@ Report links below point to local runtime artifacts; run `make report` if they a
 - the persisted observatory report still needs real Spark capture and comparison against the QEMU baseline
 - real Spark hardware acceptance is still missing for the observatory, loader, and kernel milestones because the actual operator/root/reboot flow still has to happen on hardware, and the loader milestone still needs both the returned handoff report and stage0 -> stage1 -> kernel evidence from hardware
 - x86_64, PCI, RTX, and Hopper lanes are placeholders only; no second hardware lane boots yet
-- the service graph is still a typed local runtime model; real kernel task creation, endpoint wiring, shared-memory grants, and service health publication are not integrated yet
+- the service graph is still a typed local runtime model; `initd` now publishes a typed local boot status page for the first service chain, but real kernel task creation, endpoint wiring, shared-memory grants, and kernel-backed service health publication are not integrated yet
 - timer, IRQ, topology, capability, endpoint routing beyond the first reserved bootstrap slot, shared-memory policy beyond the first reserved bootstrap region, a real EL0 syscall boundary, storage, shell, update, CPU inference, topology-aware `memd`, and native accelerator work are still ahead
 
 ## Latest Automation Status
@@ -62,7 +62,7 @@ Report links below point to local runtime artifacts; run `make report` if they a
 - environment_status: 0
 - local_validation_status: 0
 - loop_env_status: 0
-- loop_validate_status: 101
+- loop_validate_status: 0
 - loop_report_status: 0
 - bootstrap_kernel_svc_diagnostic_status: returned
 - bootstrap_kernel_svc_caller_capture_matched: true
@@ -71,9 +71,9 @@ Report links below point to local runtime artifacts; run `make report` if they a
 - bootstrap_el0_diagnostic_status: svc_returned_to_el0_spin
 - bootstrap_svc_diagnostic_status: returned
 - bootstrap_trap_diagnostic_status: returned
-- latest_report: /home/nova/NovaOS/artifacts/reports/novaos-report-20260421T223351Z.md
-- latest_loop_log: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260421T222934Z.log
-- latest_loop_summary: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260421T222934Z.summary
+- latest_report: /home/nova/NovaOS/artifacts/reports/novaos-report-20260422T000400Z.md
+- latest_loop_log: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260421T235732Z.log
+- latest_loop_summary: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260421T235732Z.summary
 - latest_bootstrap_kernel_svc_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-kernel-svc-diagnostic-20260418T151843Z.log
 - latest_bootstrap_pretransfer_svc_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-pretransfer-svc-diagnostic-20260418T151905Z.log
 - latest_bootstrap_el0_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-el0-diagnostic-20260421T142322Z.log

@@ -55,7 +55,42 @@ impl PolicyMatrix {
 const DEFAULT_POLICY_RULES: &[PolicyRule] = &[
     PolicyRule::new(
         NovaPolicyAction::LaunchService,
-        NovaPolicyScope::System,
+        NovaPolicyScope::Service(NovaServiceId::POLICYD),
+        NovaPolicyDecision::Allow,
+    ),
+    PolicyRule::new(
+        NovaPolicyAction::LaunchService,
+        NovaPolicyScope::Service(NovaServiceId::AGENTD),
+        NovaPolicyDecision::Allow,
+    ),
+    PolicyRule::new(
+        NovaPolicyAction::LaunchService,
+        NovaPolicyScope::Service(NovaServiceId::MEMD),
+        NovaPolicyDecision::Allow,
+    ),
+    PolicyRule::new(
+        NovaPolicyAction::LaunchService,
+        NovaPolicyScope::Service(NovaServiceId::ACCELD),
+        NovaPolicyDecision::Allow,
+    ),
+    PolicyRule::new(
+        NovaPolicyAction::LaunchService,
+        NovaPolicyScope::Service(NovaServiceId::INTENTD),
+        NovaPolicyDecision::Allow,
+    ),
+    PolicyRule::new(
+        NovaPolicyAction::LaunchService,
+        NovaPolicyScope::Service(NovaServiceId::SCENED),
+        NovaPolicyDecision::Allow,
+    ),
+    PolicyRule::new(
+        NovaPolicyAction::LaunchService,
+        NovaPolicyScope::Service(NovaServiceId::APPBRIDGED),
+        NovaPolicyDecision::Allow,
+    ),
+    PolicyRule::new(
+        NovaPolicyAction::LaunchService,
+        NovaPolicyScope::Service(NovaServiceId::SHELLD),
         NovaPolicyDecision::Allow,
     ),
     PolicyRule::new(
@@ -95,6 +130,7 @@ pub fn evaluate_policy(request: NovaPolicyRequest) -> NovaPolicyDecision {
 const fn policy_scope_matches(rule_scope: NovaPolicyScope, request_scope: NovaPolicyScope) -> bool {
     match (rule_scope, request_scope) {
         (NovaPolicyScope::System, NovaPolicyScope::System) => true,
+        (NovaPolicyScope::Service(lhs), NovaPolicyScope::Service(rhs)) => lhs.0 == rhs.0,
         (NovaPolicyScope::Scene(lhs), NovaPolicyScope::Scene(rhs)) => lhs.0 == rhs.0,
         (NovaPolicyScope::Agent(lhs), NovaPolicyScope::Agent(rhs)) => lhs.0 == rhs.0,
         (NovaPolicyScope::App(lhs), NovaPolicyScope::App(rhs)) => lhs.0 == rhs.0,

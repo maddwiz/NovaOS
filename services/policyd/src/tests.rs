@@ -10,13 +10,25 @@ fn default_matrix_allows_core_service_launches() {
         subject_service: NovaServiceId::INITD,
         subject_agent: NovaAgentId::INIT,
         action: NovaPolicyAction::LaunchService,
-        scope: NovaPolicyScope::System,
+        scope: NovaPolicyScope::Service(NovaServiceId::POLICYD),
     };
 
     assert_eq!(
         default_policy_matrix().decide(request),
         NovaPolicyDecision::Allow
     );
+}
+
+#[test]
+fn default_matrix_denies_unknown_service_launches() {
+    let request = NovaPolicyRequest {
+        subject_service: NovaServiceId::INITD,
+        subject_agent: NovaAgentId::INIT,
+        action: NovaPolicyAction::LaunchService,
+        scope: NovaPolicyScope::Service(NovaServiceId::new(0x9999)),
+    };
+
+    assert_eq!(evaluate_policy(request), NovaPolicyDecision::Deny);
 }
 
 #[test]

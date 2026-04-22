@@ -17,7 +17,7 @@ fn main() {
             .service_report(index)
             .expect("initd service report must match status page");
         println!(
-            "service name={} kind={} required={} order={} state={} launch={} detail={} binding={} task=0x{:x} endpoint=0x{:x} shm=0x{:x}",
+            "service name={} kind={} required={} order={} state={} launch={} detail={} policy={} binding={} task=0x{:x} endpoint=0x{:x} shm=0x{:x}",
             service.descriptor.name,
             service.descriptor.kind.label(),
             service.descriptor.required,
@@ -25,6 +25,7 @@ fn main() {
             service.state.label(),
             service.launch_status.label(),
             service.launch_detail,
+            service.policy_decision.label(),
             service.kernel_binding.state.label(),
             service.kernel_binding.task.0,
             service.kernel_binding.control_endpoint.0,

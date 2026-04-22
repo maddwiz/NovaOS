@@ -1,5 +1,6 @@
 use nova_rt::{
-    NovaEndpointId, NovaSceneId, NovaServiceDescriptor, NovaServiceId, NovaServiceKernelBinding,
+    NovaAgentId, NovaEndpointId, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest,
+    NovaPolicyScope, NovaSceneId, NovaServiceDescriptor, NovaServiceId, NovaServiceKernelBinding,
     NovaServiceKernelLaunchPlan, NovaServiceKind, NovaServiceLaunchRequest, NovaServiceLaunchSpec,
     NovaServiceLaunchStatus, NovaServiceState, NovaServiceStatus, NovaSharedMemoryRegionId,
     NovaTaskId,
@@ -138,6 +139,19 @@ const fn service_launch_request(target: NovaServiceId) -> NovaServiceLaunchReque
     NovaServiceLaunchRequest::new(initd_descriptor().id, target, NovaSceneId::ROOT, 0)
 }
 
+const fn service_launch_policy_request(target: NovaServiceId) -> NovaPolicyRequest {
+    NovaPolicyRequest {
+        subject_service: initd_descriptor().id,
+        subject_agent: NovaAgentId::INIT,
+        action: NovaPolicyAction::LaunchService,
+        scope: NovaPolicyScope::Service(target),
+    }
+}
+
+fn service_launch_policy_decision(target: NovaServiceId) -> NovaPolicyDecision {
+    novaos_policyd::evaluate_policy(service_launch_policy_request(target))
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InitServiceLaunchTable {
     pub init_service: NovaServiceDescriptor,
@@ -206,6 +220,16 @@ impl InitServiceLaunchPlan {
             self.spec_for(id)?
                 .launch_request(self.init_service.id, NovaSceneId::ROOT),
         )
+    }
+
+    pub fn launch_policy_request_for(self, id: NovaServiceId) -> Option<NovaPolicyRequest> {
+        self.spec_for(id)?;
+        Some(service_launch_policy_request(id))
+    }
+
+    pub fn launch_policy_decision_for(self, id: NovaServiceId) -> Option<NovaPolicyDecision> {
+        self.spec_for(id)?;
+        Some(service_launch_policy_decision(id))
     }
 
     pub fn validate(self) -> bool {
@@ -344,10 +368,15 @@ pub struct InitRuntimeServiceReport {
     pub state: NovaServiceState,
     pub launch_status: NovaServiceLaunchStatus,
     pub launch_detail: u64,
+    pub policy_decision: NovaPolicyDecision,
     pub kernel_binding: NovaServiceKernelBinding,
 }
 
 impl InitRuntimeServiceReport {
+    pub const fn policy_allows_launch(self) -> bool {
+        matches!(self.policy_decision, NovaPolicyDecision::Allow)
+    }
+
     pub const fn is_required_healthy(self) -> bool {
         !self.descriptor.required
             || matches!(
@@ -394,6 +423,7 @@ impl InitRuntimeReport {
             state: status.state,
             launch_status: status.last_result.status,
             launch_detail: status.last_result.detail,
+            policy_decision: service_launch_policy_decision(id),
             kernel_binding: kernel_plan.binding,
         })
     }

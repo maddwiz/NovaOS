@@ -525,6 +525,16 @@ pub enum NovaPolicyDecision {
     Ask = 3,
 }
 
+impl NovaPolicyDecision {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Allow => "allow",
+            Self::Deny => "deny",
+            Self::Ask => "ask",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u16)]
 pub enum NovaPolicyAction {
@@ -539,6 +549,7 @@ pub enum NovaPolicyAction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NovaPolicyScope {
     System,
+    Service(NovaServiceId),
     Scene(NovaSceneId),
     Agent(NovaAgentId),
     App(NovaAppId),
@@ -645,6 +656,7 @@ mod tests {
             NovaServiceBindingState::KernelBacked.label(),
             "kernel-backed"
         );
+        assert_eq!(NovaPolicyDecision::Allow.label(), "allow");
     }
 
     #[test]
@@ -819,15 +831,19 @@ mod tests {
     }
 
     #[test]
-    fn policy_request_can_target_system_or_bridge_scope() {
+    fn policy_request_can_target_service_or_bridge_scope() {
         let request = NovaPolicyRequest {
             subject_service: NovaServiceId::AGENTD,
             subject_agent: super::NovaAgentId::INIT,
             action: NovaPolicyAction::AppAction,
-            scope: NovaPolicyScope::System,
+            scope: NovaPolicyScope::Service(NovaServiceId::APPBRIDGED),
         };
 
         assert_eq!(request.action, NovaPolicyAction::AppAction);
+        assert_eq!(
+            request.scope,
+            NovaPolicyScope::Service(NovaServiceId::APPBRIDGED)
+        );
         assert_eq!(NovaPolicyDecision::Ask as u16, 3);
     }
 }

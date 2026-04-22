@@ -1,7 +1,8 @@
 use nova_rt::{
     NovaEndpointId, NovaSceneId, NovaServiceDescriptor, NovaServiceId, NovaServiceKernelBinding,
     NovaServiceKernelLaunchPlan, NovaServiceKind, NovaServiceLaunchRequest, NovaServiceLaunchSpec,
-    NovaServiceStatus, NovaSharedMemoryRegionId, NovaTaskId,
+    NovaServiceLaunchStatus, NovaServiceState, NovaServiceStatus, NovaSharedMemoryRegionId,
+    NovaTaskId,
 };
 pub use novaos_acceld::{ACCELD_DESCRIPTOR, ACCELD_LAUNCH_SPEC};
 pub use novaos_agentd::{AGENTD_DESCRIPTOR, AGENTD_LAUNCH_SPEC};
@@ -337,6 +338,67 @@ impl InitKernelLaunchPlanPage {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InitRuntimeServiceReport {
+    pub descriptor: NovaServiceDescriptor,
+    pub state: NovaServiceState,
+    pub launch_status: NovaServiceLaunchStatus,
+    pub launch_detail: u64,
+    pub kernel_binding: NovaServiceKernelBinding,
+}
+
+impl InitRuntimeServiceReport {
+    pub const fn is_required_healthy(self) -> bool {
+        !self.descriptor.required
+            || matches!(
+                self.state,
+                NovaServiceState::Running | NovaServiceState::Degraded
+            )
+    }
+
+    pub const fn has_kernel_objects(self) -> bool {
+        self.kernel_binding.has_kernel_objects()
+    }
+
+    pub const fn can_publish_kernel_health(self) -> bool {
+        self.kernel_binding.can_publish_kernel_health()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InitRuntimeReport {
+    pub status_page: InitRuntimeStatusPage,
+    pub kernel_plan_page: InitKernelLaunchPlanPage,
+}
+
+impl InitRuntimeReport {
+    pub const fn service_count(self) -> usize {
+        self.status_page.service_count()
+    }
+
+    pub fn healthy(self) -> bool {
+        self.status_page.healthy() && self.kernel_plan_page.ready_for_kernel_handoff()
+    }
+
+    pub fn service_report(self, index: usize) -> Option<InitRuntimeServiceReport> {
+        let status = *self.status_page.services.get(index)?;
+        self.service_report_for(status.descriptor.id)
+    }
+
+    pub fn service_report_for(self, id: NovaServiceId) -> Option<InitRuntimeServiceReport> {
+        let status = self.status_page.status_for(id)?;
+        let kernel_plan = self.kernel_plan_page.plan_for(id)?;
+
+        Some(InitRuntimeServiceReport {
+            descriptor: status.descriptor,
+            state: status.state,
+            launch_status: status.last_result.status,
+            launch_detail: status.last_result.detail,
+            kernel_binding: kernel_plan.binding,
+        })
+    }
+}
+
 pub const fn initd_descriptor() -> NovaServiceDescriptor {
     NovaServiceDescriptor::new(
         NovaServiceId::INITD,
@@ -368,6 +430,13 @@ pub const fn initd_kernel_launch_plan_page() -> InitKernelLaunchPlanPage {
         registered_service: initd_descriptor(),
         plans: CORE_SERVICE_KERNEL_LAUNCH_PLANS,
         generation: 1,
+    }
+}
+
+pub const fn initd_runtime_report() -> InitRuntimeReport {
+    InitRuntimeReport {
+        status_page: initd_boot_status_page(),
+        kernel_plan_page: initd_kernel_launch_plan_page(),
     }
 }
 

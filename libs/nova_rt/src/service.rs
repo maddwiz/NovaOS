@@ -121,6 +121,18 @@ pub enum NovaServiceKind {
     Operator = 5,
 }
 
+impl NovaServiceKind {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Kernel => "kernel",
+            Self::Core => "core",
+            Self::Interaction => "interaction",
+            Self::Bridge => "bridge",
+            Self::Operator => "operator",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u16)]
 pub enum NovaServiceState {
@@ -130,6 +142,19 @@ pub enum NovaServiceState {
     Degraded = 3,
     Stopped = 4,
     Failed = 5,
+}
+
+impl NovaServiceState {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::NotStarted => "not-started",
+            Self::Starting => "starting",
+            Self::Running => "running",
+            Self::Degraded => "degraded",
+            Self::Stopped => "stopped",
+            Self::Failed => "failed",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -236,6 +261,19 @@ pub enum NovaServiceLaunchStatus {
     Deferred = 3,
     Denied = 4,
     Failed = 5,
+}
+
+impl NovaServiceLaunchStatus {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::NotRequested => "not-requested",
+            Self::Started => "started",
+            Self::AlreadyRunning => "already-running",
+            Self::Deferred => "deferred",
+            Self::Denied => "denied",
+            Self::Failed => "failed",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -371,6 +409,19 @@ pub enum NovaServiceBindingState {
     EndpointReady = 3,
     SharedMemoryReady = 4,
     KernelBacked = 5,
+}
+
+impl NovaServiceBindingState {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::ModelOnly => "model-only",
+            Self::Planned => "planned",
+            Self::KernelTaskReady => "kernel-task-ready",
+            Self::EndpointReady => "endpoint-ready",
+            Self::SharedMemoryReady => "shared-memory-ready",
+            Self::KernelBacked => "kernel-backed",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -580,6 +631,20 @@ mod tests {
         assert_ne!(NovaServiceId::INITD, NovaServiceId::POLICYD);
         assert_ne!(NovaServiceId::AGENTD, NovaServiceId::INTENTD);
         assert_eq!(NovaServiceKind::Core as u16, 2);
+    }
+
+    #[test]
+    fn service_enums_expose_stable_labels() {
+        assert_eq!(NovaServiceKind::Interaction.label(), "interaction");
+        assert_eq!(super::NovaServiceState::Running.label(), "running");
+        assert_eq!(
+            NovaServiceLaunchStatus::AlreadyRunning.label(),
+            "already-running"
+        );
+        assert_eq!(
+            NovaServiceBindingState::KernelBacked.label(),
+            "kernel-backed"
+        );
     }
 
     #[test]

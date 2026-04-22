@@ -1,6 +1,6 @@
 use crate::{
     core_launch_plan, core_launch_table, initd_boot_snapshot, initd_boot_status_page,
-    initd_kernel_launch_plan_page,
+    initd_kernel_launch_plan_page, initd_runtime_report,
 };
 use nova_rt::{
     NovaServiceBindingState, NovaServiceId, NovaServiceLaunchSpec, NovaServiceLaunchStatus,
@@ -120,6 +120,37 @@ fn core_launch_plan_keeps_optional_shell_model_only() {
         NovaServiceBindingState::ModelOnly
     );
     assert!(!kernel_plan.binding.has_kernel_objects());
+}
+
+#[test]
+fn runtime_report_joins_status_and_kernel_binding() {
+    let report = initd_runtime_report();
+    let service = report
+        .service_report_for(NovaServiceId::POLICYD)
+        .expect("policyd report");
+
+    assert!(report.healthy());
+    assert_eq!(service.descriptor.id, NovaServiceId::POLICYD);
+    assert_eq!(service.state, NovaServiceState::Running);
+    assert_eq!(service.launch_status, NovaServiceLaunchStatus::Started);
+    assert_eq!(service.kernel_binding.task.0, 0x1001);
+    assert_eq!(service.kernel_binding.control_endpoint.0, 0x2001);
+    assert!(service.has_kernel_objects());
+    assert!(!service.can_publish_kernel_health());
+}
+
+#[test]
+fn runtime_report_keeps_optional_shell_deferred_and_model_only() {
+    let service = initd_runtime_report()
+        .service_report_for(NovaServiceId::SHELLD)
+        .expect("shelld report");
+
+    assert_eq!(service.state.label(), "not-started");
+    assert_eq!(service.launch_status.label(), "deferred");
+    assert_eq!(service.kernel_binding.state.label(), "model-only");
+    assert!(!service.descriptor.required);
+    assert!(service.is_required_healthy());
+    assert!(!service.has_kernel_objects());
 }
 
 #[test]

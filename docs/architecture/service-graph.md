@@ -24,7 +24,7 @@ This service graph is an additive runtime layer inside the existing M0-M17 roadm
 - `appbridged`
 - optional `shelld`
 
-`apps/initd` also publishes a static boot status page for that first runtime spine. Required services are reported as started/running, while optional `shelld` is reported as deferred until an operator shell boundary is needed.
+`apps/initd` also publishes a static boot status page for that first runtime spine. Required services are reported as started/running, while optional `shelld` is reported as deferred until an operator shell boundary is needed. The host-side `initd-runtime` binary now prints the joined status/kernel-binding report for operator inspection.
 
 ## Launch Manifest V0
 

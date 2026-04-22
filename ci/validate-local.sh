@@ -45,7 +45,7 @@ cc -std=c11 -fsyntax-only "${ROOT_DIR}/abi/payload/nova_payload_v1.h"
 cc -std=c11 -fsyntax-only "${ROOT_DIR}/abi/syscall/nova_syscall_v1.h"
 cargo metadata --format-version 1 --no-deps >/dev/null
 cargo check --workspace
-cargo test -p nova_fabric -p nova_rt -p novaos-acceld -p novaos-initd -p novaos-memd -p novaos-stage1 -p novaos-kernel -p novaos-kernel-x86_64 -p novaos-pci
+cargo test -p nova_fabric -p nova_rt -p novaos-acceld -p novaos-agentd -p novaos-appbridged -p novaos-initd -p novaos-intentd -p novaos-memd -p novaos-policyd -p novaos-scened -p novaos-shelld -p novaos-stage1 -p novaos-kernel -p novaos-kernel-x86_64 -p novaos-pci
 cargo check -p spark-observe --target aarch64-unknown-uefi
 cargo check -p novaaa64 --target aarch64-unknown-uefi
 cargo check -p novaos-kernel --target aarch64-unknown-none-softfloat

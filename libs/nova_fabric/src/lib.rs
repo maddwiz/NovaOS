@@ -21,6 +21,18 @@ pub enum PlatformClass {
     FabricPartitioned = 4,
 }
 
+impl PlatformClass {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::SparkUma => "spark-uma",
+            Self::PcieSingle => "pcie-single",
+            Self::PcieMulti => "pcie-multi",
+            Self::FabricPartitioned => "fabric-partitioned",
+        }
+    }
+}
+
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MemoryTopologyClass {
@@ -29,6 +41,18 @@ pub enum MemoryTopologyClass {
     Discrete = 2,
     Nvlink = 3,
     Mig = 4,
+}
+
+impl MemoryTopologyClass {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::Uma => "uma",
+            Self::Discrete => "discrete",
+            Self::Nvlink => "nvlink",
+            Self::Mig => "mig",
+        }
+    }
 }
 
 #[repr(u16)]
@@ -63,6 +87,20 @@ pub enum MemoryPoolKind {
     StagingIo = 7,
 }
 
+impl MemoryPoolKind {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::SysCoherent => "sys-coherent",
+            Self::UmaAccelVisible => "uma-accel-visible",
+            Self::HostPinned => "host-pinned",
+            Self::GpuLocal => "gpu-local",
+            Self::PeerFabric => "peer-fabric",
+            Self::PartitionLocal => "partition-local",
+            Self::StagingIo => "staging-io",
+        }
+    }
+}
+
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum QueueClass {
@@ -71,6 +109,18 @@ pub enum QueueClass {
     Copy = 3,
     Maintenance = 4,
     LowPriBackground = 5,
+}
+
+impl QueueClass {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Latency => "latency",
+            Self::Batch => "batch",
+            Self::Copy => "copy",
+            Self::Maintenance => "maintenance",
+            Self::LowPriBackground => "low-pri-background",
+        }
+    }
 }
 
 bitflags! {
@@ -206,5 +256,13 @@ mod tests {
         assert!(caps.contains(FabricCapabilityFlags::INTEGRATED_ACCEL));
         assert!(caps.contains(FabricCapabilityFlags::UMA_COHERENT));
         assert!(!caps.contains(FabricCapabilityFlags::DISCRETE_ACCEL));
+    }
+
+    #[test]
+    fn portability_enums_expose_stable_labels() {
+        assert_eq!(PlatformClass::SparkUma.label(), "spark-uma");
+        assert_eq!(MemoryTopologyClass::Nvlink.label(), "nvlink");
+        assert_eq!(MemoryPoolKind::PartitionLocal.label(), "partition-local");
+        assert_eq!(QueueClass::LowPriBackground.label(), "low-pri-background");
     }
 }

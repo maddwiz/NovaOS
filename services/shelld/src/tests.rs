@@ -1,16 +1,34 @@
 use crate::{
-    SHELLD_LAUNCH_SPEC, ShellCommand, ShellCommandParseError, describe_scene,
-    describe_service_status, parse_command,
+    SHELLD_LAUNCH_SPEC, ShellCommand, ShellCommandParseError, describe_accel_dispatch,
+    describe_memory_placement, describe_scene, describe_service_status, parse_command,
 };
+use nova_fabric::{MemoryTopologyClass, QueueClass};
 use nova_rt::{
     NovaAgentId, NovaSceneDescriptor, NovaSceneId, NovaSceneMode, NovaServiceDescriptor,
     NovaServiceId, NovaServiceKind, NovaServiceLaunchResult, NovaServiceLaunchStatus,
     NovaServiceState, NovaServiceStatus,
 };
+use novaos_acceld::{
+    AccelDispatchPlan, AccelDispatchRequest, AccelDispatchStatus, BackendDescriptor,
+};
+use novaos_memd::{
+    MemoryPlacementGoal, MemoryPlacementPlan, MemoryPlacementRequest, MemoryPlacementStatus,
+};
 
 #[test]
 fn parser_lists_services() {
     assert_eq!(parse_command("services"), Ok(ShellCommand::Services));
+}
+
+#[test]
+fn parser_exposes_memory_and_accel_operator_commands() {
+    assert_eq!(parse_command("mem plan"), Ok(ShellCommand::MemoryPlan));
+    assert_eq!(parse_command("memory plan"), Ok(ShellCommand::MemoryPlan));
+    assert_eq!(
+        parse_command("accel dispatch"),
+        Ok(ShellCommand::AccelDispatch)
+    );
+    assert_eq!(parse_command("accel plan"), Ok(ShellCommand::AccelDispatch));
 }
 
 #[test]
@@ -122,6 +140,89 @@ fn scene_view_exposes_stable_operator_fields() {
     assert_eq!(line.mode, "operator");
     assert_eq!(line.app_count, 2);
     assert_eq!(line.agent_count, 3);
+}
+
+#[test]
+fn memory_placement_view_exposes_stable_operator_fields() {
+    let plan = MemoryPlacementPlan::new(
+        "uma",
+        MemoryTopologyClass::Uma,
+        MemoryPlacementRequest::exact(4096, MemoryPlacementGoal::AcceleratorVisible),
+        Some(nova_fabric::MemoryPoolKind::UmaAccelVisible),
+        MemoryPlacementStatus::Ready,
+    );
+    let line = describe_memory_placement(plan);
+
+    assert_eq!(line.profile, "uma");
+    assert_eq!(line.topology, "uma");
+    assert_eq!(line.goal, "accelerator-visible");
+    assert_eq!(line.pool, "uma-accel-visible");
+    assert_eq!(line.bytes, 4096);
+    assert_eq!(line.status, "ready");
+    assert!(line.ready);
+    assert!(!line.fallback);
+}
+
+#[test]
+fn memory_placement_view_marks_missing_pool_as_none() {
+    let plan = MemoryPlacementPlan::new(
+        "discrete",
+        MemoryTopologyClass::Discrete,
+        MemoryPlacementRequest::exact(8192, MemoryPlacementGoal::PeerFabric),
+        None,
+        MemoryPlacementStatus::UnsupportedGoal,
+    );
+    let line = describe_memory_placement(plan);
+
+    assert_eq!(line.profile, "discrete");
+    assert_eq!(line.pool, "none");
+    assert_eq!(line.status, "unsupported-goal");
+    assert!(!line.ready);
+    assert!(!line.fallback);
+}
+
+#[test]
+fn accel_dispatch_view_exposes_stable_operator_fields() {
+    let backend = BackendDescriptor {
+        name: "gb10",
+        platform_class: nova_fabric::PlatformClass::SparkUma,
+        capability_flags: nova_fabric::FabricCapabilityFlags::INTEGRATED_ACCEL,
+        queue_class_count: 4,
+    };
+    let plan = AccelDispatchPlan::new(
+        AccelDispatchRequest::exact(QueueClass::Latency),
+        true,
+        Some(backend),
+        AccelDispatchStatus::Ready,
+    );
+    let line = describe_accel_dispatch(plan);
+
+    assert_eq!(line.backend, "gb10");
+    assert_eq!(line.platform, "spark-uma");
+    assert_eq!(line.queue, "latency");
+    assert_eq!(line.status, "ready");
+    assert!(line.seed_ready);
+    assert!(line.ready);
+    assert!(!line.cpu_fallback);
+}
+
+#[test]
+fn accel_dispatch_view_marks_missing_backend_as_none() {
+    let plan = AccelDispatchPlan::new(
+        AccelDispatchRequest::new(QueueClass::LowPriBackground, true),
+        false,
+        None,
+        AccelDispatchStatus::MissingPlatformSeed,
+    );
+    let line = describe_accel_dispatch(plan);
+
+    assert_eq!(line.backend, "none");
+    assert_eq!(line.platform, "unknown");
+    assert_eq!(line.queue, "low-pri-background");
+    assert_eq!(line.status, "missing-platform-seed");
+    assert!(!line.seed_ready);
+    assert!(!line.ready);
+    assert!(!line.cpu_fallback);
 }
 
 #[test]

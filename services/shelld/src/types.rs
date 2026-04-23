@@ -1,9 +1,14 @@
+use nova_fabric::{MemoryPoolKind, PlatformClass};
 use nova_rt::{NovaIntentKind, NovaSceneDescriptor, NovaSceneId, NovaServiceId, NovaServiceStatus};
+use novaos_acceld::AccelDispatchPlan;
+use novaos_memd::MemoryPlacementPlan;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ShellCommand {
     Services,
     Scenes,
+    MemoryPlan,
+    AccelDispatch,
     SwitchScene(NovaSceneId),
     LaunchService(NovaServiceId),
     Intent(NovaIntentKind),
@@ -35,6 +40,29 @@ pub struct ShellSceneListLine {
     pub agent_count: u16,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ShellMemoryPlacementLine {
+    pub profile: &'static str,
+    pub topology: &'static str,
+    pub goal: &'static str,
+    pub pool: &'static str,
+    pub bytes: u64,
+    pub status: &'static str,
+    pub ready: bool,
+    pub fallback: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ShellAccelDispatchLine {
+    pub backend: &'static str,
+    pub platform: &'static str,
+    pub queue: &'static str,
+    pub status: &'static str,
+    pub seed_ready: bool,
+    pub ready: bool,
+    pub cpu_fallback: bool,
+}
+
 pub const fn describe_service_status(status: NovaServiceStatus) -> ShellServiceStatusLine {
     ShellServiceStatusLine {
         service: status.descriptor.id,
@@ -57,11 +85,38 @@ pub const fn describe_scene(descriptor: NovaSceneDescriptor) -> ShellSceneListLi
     }
 }
 
+pub const fn describe_memory_placement(plan: MemoryPlacementPlan) -> ShellMemoryPlacementLine {
+    ShellMemoryPlacementLine {
+        profile: plan.profile_name,
+        topology: plan.topology.label(),
+        goal: plan.request.goal.label(),
+        pool: memory_pool_label(plan.selected_pool),
+        bytes: plan.request.bytes,
+        status: plan.status.label(),
+        ready: plan.is_ready(),
+        fallback: plan.used_fallback(),
+    }
+}
+
+pub const fn describe_accel_dispatch(plan: AccelDispatchPlan) -> ShellAccelDispatchLine {
+    ShellAccelDispatchLine {
+        backend: backend_name(plan),
+        platform: backend_platform(plan).label(),
+        queue: plan.request.queue_class.label(),
+        status: plan.status.label(),
+        seed_ready: plan.seed_ready,
+        ready: plan.is_ready(),
+        cpu_fallback: plan.used_cpu_fallback(),
+    }
+}
+
 pub fn parse_command(input: &str) -> Result<ShellCommand, ShellCommandParseError> {
     match input.trim() {
         "" => Err(ShellCommandParseError::Empty),
         "services" | "svc" => Ok(ShellCommand::Services),
         "scenes" | "scene ls" => Ok(ShellCommand::Scenes),
+        "mem plan" | "memory plan" => Ok(ShellCommand::MemoryPlan),
+        "accel dispatch" | "accel plan" => Ok(ShellCommand::AccelDispatch),
         "scene root" => Ok(ShellCommand::SwitchScene(NovaSceneId::ROOT)),
         "launch policyd" => launch_service(NovaServiceId::POLICYD),
         "launch agentd" => launch_service(NovaServiceId::AGENTD),
@@ -78,4 +133,25 @@ pub fn parse_command(input: &str) -> Result<ShellCommand, ShellCommandParseError
 
 const fn launch_service(service: NovaServiceId) -> Result<ShellCommand, ShellCommandParseError> {
     Ok(ShellCommand::LaunchService(service))
+}
+
+const fn memory_pool_label(pool: Option<MemoryPoolKind>) -> &'static str {
+    match pool {
+        Some(pool) => pool.label(),
+        None => "none",
+    }
+}
+
+const fn backend_name(plan: AccelDispatchPlan) -> &'static str {
+    match plan.selected_backend {
+        Some(backend) => backend.name,
+        None => "none",
+    }
+}
+
+const fn backend_platform(plan: AccelDispatchPlan) -> PlatformClass {
+    match plan.selected_backend {
+        Some(backend) => backend.platform_class,
+        None => PlatformClass::Unknown,
+    }
 }

@@ -197,7 +197,10 @@ dependencies = [
 name = "novaos-shelld"
 version = "0.1.0"
 dependencies = [
+ "nova_fabric",
  "nova_rt",
+ "novaos-acceld",
+ "novaos-memd",
 ]
 
 [[package]]

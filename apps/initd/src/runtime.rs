@@ -10,6 +10,7 @@ pub use novaos_agentd::{AGENTD_DESCRIPTOR, AGENTD_LAUNCH_SPEC};
 pub use novaos_appbridged::{APPBRIDGED_DESCRIPTOR, APPBRIDGED_LAUNCH_SPEC};
 pub use novaos_intentd::{INTENTD_DESCRIPTOR, INTENTD_LAUNCH_SPEC};
 pub use novaos_memd::{MEMD_DESCRIPTOR, MEMD_LAUNCH_SPEC};
+use novaos_policyd::PolicyAuditRecord;
 pub use novaos_policyd::{POLICYD_DESCRIPTOR, POLICYD_LAUNCH_SPEC};
 pub use novaos_scened::{SCENED_DESCRIPTOR, SCENED_LAUNCH_SPEC};
 pub use novaos_shelld::{SHELLD_DESCRIPTOR, SHELLD_LAUNCH_SPEC};
@@ -150,6 +151,17 @@ const fn service_launch_policy_request(target: NovaServiceId) -> NovaPolicyReque
 
 fn service_launch_policy_decision(target: NovaServiceId) -> NovaPolicyDecision {
     novaos_policyd::evaluate_policy(service_launch_policy_request(target))
+}
+
+fn service_launch_policy_audit(target: NovaServiceId, sequence: u64) -> PolicyAuditRecord {
+    novaos_policyd::evaluate_policy_with_audit(service_launch_policy_request(target), sequence)
+}
+
+fn service_launch_sequence(target: NovaServiceId) -> u64 {
+    CORE_SERVICE_LAUNCH_ORDER
+        .iter()
+        .position(|service| service.id == target)
+        .map_or(0, |index| index as u64 + 1)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -365,16 +377,25 @@ impl InitKernelLaunchPlanPage {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InitRuntimeServiceReport {
     pub descriptor: NovaServiceDescriptor,
+    pub launch_request: NovaServiceLaunchRequest,
     pub state: NovaServiceState,
     pub launch_status: NovaServiceLaunchStatus,
     pub launch_detail: u64,
-    pub policy_decision: NovaPolicyDecision,
+    pub policy_audit: PolicyAuditRecord,
     pub kernel_binding: NovaServiceKernelBinding,
 }
 
 impl InitRuntimeServiceReport {
+    pub const fn policy_decision(self) -> NovaPolicyDecision {
+        self.policy_audit.decision
+    }
+
     pub const fn policy_allows_launch(self) -> bool {
-        matches!(self.policy_decision, NovaPolicyDecision::Allow)
+        self.policy_audit.allowed()
+    }
+
+    pub const fn policy_requires_approval(self) -> bool {
+        self.policy_audit.requires_approval()
     }
 
     pub const fn is_required_healthy(self) -> bool {
@@ -405,6 +426,42 @@ impl InitRuntimeReport {
         self.status_page.service_count()
     }
 
+    pub fn allowed_service_count(self) -> usize {
+        self.status_page
+            .services
+            .iter()
+            .filter(|status| {
+                self.service_report_for(status.descriptor.id)
+                    .is_some_and(InitRuntimeServiceReport::policy_allows_launch)
+            })
+            .count()
+    }
+
+    pub fn approval_required_service_count(self) -> usize {
+        self.status_page
+            .services
+            .iter()
+            .filter(|status| {
+                self.service_report_for(status.descriptor.id)
+                    .is_some_and(InitRuntimeServiceReport::policy_requires_approval)
+            })
+            .count()
+    }
+
+    pub fn denied_service_count(self) -> usize {
+        self.status_page
+            .services
+            .iter()
+            .filter(|status| {
+                self.service_report_for(status.descriptor.id)
+                    .is_some_and(|report| !report.policy_allows_launch())
+                    && !self
+                        .service_report_for(status.descriptor.id)
+                        .is_some_and(InitRuntimeServiceReport::policy_requires_approval)
+            })
+            .count()
+    }
+
     pub fn healthy(self) -> bool {
         self.status_page.healthy() && self.kernel_plan_page.ready_for_kernel_handoff()
     }
@@ -417,13 +474,16 @@ impl InitRuntimeReport {
     pub fn service_report_for(self, id: NovaServiceId) -> Option<InitRuntimeServiceReport> {
         let status = self.status_page.status_for(id)?;
         let kernel_plan = self.kernel_plan_page.plan_for(id)?;
+        let launch_request = service_launch_request(id);
+        let policy_audit = service_launch_policy_audit(id, service_launch_sequence(id));
 
         Some(InitRuntimeServiceReport {
             descriptor: status.descriptor,
+            launch_request,
             state: status.state,
             launch_status: status.last_result.status,
             launch_detail: status.last_result.detail,
-            policy_decision: service_launch_policy_decision(id),
+            policy_audit,
             kernel_binding: kernel_plan.binding,
         })
     }

@@ -24,7 +24,7 @@ This service graph is an additive runtime layer inside the existing M0-M17 roadm
 - `appbridged`
 - optional `shelld`
 
-`apps/initd` also publishes a static boot status page for that first runtime spine. Required services are reported as started/running, while optional `shelld` is reported as deferred until an operator shell boundary is needed. The host-side `initd-runtime` binary now prints the joined status/policy/kernel-binding report for operator inspection.
+`apps/initd` also publishes a static boot status page for that first runtime spine. Required services are reported as started/running, while optional `shelld` is reported as deferred until an operator shell boundary is needed. The host-side `initd-runtime` binary now prints the joined launch-request/status/policy-audit/kernel-binding report for operator inspection.
 
 ## Launch Manifest V0
 
@@ -36,7 +36,7 @@ This service graph is an additive runtime layer inside the existing M0-M17 roadm
 
 Each service crate exports its own descriptor and launch spec. `apps/initd` assembles those service-owned specs into the first runtime manifest and publishes a deterministic kernel-binding plan for required services. Optional `shelld` remains model-only until an operator shell boundary is requested.
 
-`apps/initd` also asks `services/policyd` for the launch decision attached to each service report. The current static policy matrix allows launch of the known runtime-spine services and denies unknown service targets, and `policyd` can now emit a typed audit record for each evaluated request. The first chain remains boot-green while making policyd part of the runtime seam instead of a detached placeholder.
+`apps/initd` also asks `services/policyd` for the typed audit record attached to each service launch request and report. The current static policy matrix allows launch of the known runtime-spine services and denies unknown service targets, and `policyd` now exposes the decision source, matched rule index, and deterministic launch sequence alongside the decision itself. The first chain remains boot-green while making policyd part of the runtime seam instead of a detached placeholder.
 
 This step does not allocate syscall numbers, does not modify `kernel/**`, and does not change boot handoff behavior.
 

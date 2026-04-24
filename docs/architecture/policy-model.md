@@ -9,7 +9,7 @@
 - `libs/nova_rt::NovaPolicyScope`: system, service, scene, agent, or app.
 - `services/policyd` owns the first hardcoded decision matrix.
 - `services/policyd` returns a typed audit record for evaluated policy requests, including the request, decision, decision source, matched rule index when present, and caller-provided sequence.
-- `apps/initd` evaluates each service launch in its runtime report through the `policyd` matrix before reporting the launch as policy-allowed.
+- `apps/initd` now carries the launch request and typed audit record for each service launch in its runtime report, so operator output can show decision provenance instead of only allow/deny.
 - `services/intentd` projects each intent into a scene-scoped `RouteIntent` policy request before routing.
 
 ## Initial Defaults

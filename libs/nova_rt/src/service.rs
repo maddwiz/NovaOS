@@ -697,6 +697,17 @@ pub enum NovaIntentDispatch {
     Status(NovaStatusRequest),
 }
 
+impl NovaIntentDispatch {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::LaunchService(_) => "launch-service",
+            Self::SwitchScene(_) => "switch-scene",
+            Self::AppAction(_) => "app-action",
+            Self::Status(_) => "status",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NovaIntentProjection {
     pub intent_id: u64,
@@ -715,6 +726,10 @@ impl NovaIntentProjection {
             target_service,
             dispatch,
         }
+    }
+
+    pub const fn dispatch_label(self) -> &'static str {
+        self.dispatch.label()
     }
 }
 
@@ -1057,6 +1072,7 @@ mod tests {
 
         assert_eq!(projection.intent_id, 7);
         assert_eq!(projection.target_service, NovaServiceId::AGENTD);
+        assert_eq!(projection.dispatch_label(), "launch-service");
         assert_eq!(
             projection.dispatch,
             NovaIntentDispatch::LaunchService(launch)

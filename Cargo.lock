@@ -200,6 +200,7 @@ dependencies = [
  "nova_fabric",
  "nova_rt",
  "novaos-acceld",
+ "novaos-intentd",
  "novaos-memd",
 ]
 

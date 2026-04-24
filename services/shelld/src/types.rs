@@ -1,6 +1,10 @@
 use nova_fabric::{MemoryPoolKind, PlatformClass};
-use nova_rt::{NovaIntentKind, NovaSceneDescriptor, NovaSceneId, NovaServiceId, NovaServiceStatus};
+use nova_rt::{
+    NovaAgentId, NovaIntentDispatch, NovaIntentEnvelope, NovaIntentKind, NovaPolicyDecision,
+    NovaSceneDescriptor, NovaSceneId, NovaServiceId, NovaServiceStatus,
+};
 use novaos_acceld::AccelDispatchPlan;
+use novaos_intentd::{IntentPlan, route_intent};
 use novaos_memd::MemoryPlacementPlan;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -63,6 +67,16 @@ pub struct ShellAccelDispatchLine {
     pub cpu_fallback: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ShellIntentProjectionLine {
+    pub intent_id: u64,
+    pub target_service: NovaServiceId,
+    pub dispatch: &'static str,
+    pub policy: &'static str,
+    pub approval_required: bool,
+    pub request_target: u64,
+}
+
 pub const fn describe_service_status(status: NovaServiceStatus) -> ShellServiceStatusLine {
     ShellServiceStatusLine {
         service: status.descriptor.id,
@@ -110,6 +124,78 @@ pub const fn describe_accel_dispatch(plan: AccelDispatchPlan) -> ShellAccelDispa
     }
 }
 
+pub const fn describe_intent_plan(plan: IntentPlan) -> ShellIntentProjectionLine {
+    ShellIntentProjectionLine {
+        intent_id: plan.intent_id,
+        target_service: plan.projection.target_service,
+        dispatch: plan.projection.dispatch_label(),
+        policy: plan.step.policy.label(),
+        approval_required: plan.requires_approval,
+        request_target: intent_request_target(plan.projection.dispatch),
+    }
+}
+
+pub fn intent_for_command(
+    command: ShellCommand,
+    source_agent: NovaAgentId,
+    scene: NovaSceneId,
+    intent_id: u64,
+) -> Option<NovaIntentEnvelope> {
+    let (kind, target_service, policy_hint) = match command {
+        ShellCommand::LaunchService(service) => (
+            NovaIntentKind::LaunchService,
+            service,
+            NovaPolicyDecision::Ask,
+        ),
+        ShellCommand::SwitchScene(_) => (
+            NovaIntentKind::SwitchScene,
+            NovaServiceId::new(0),
+            NovaPolicyDecision::Ask,
+        ),
+        ShellCommand::Intent(kind) => (
+            kind,
+            NovaServiceId::new(0),
+            default_policy_hint_for_intent(kind),
+        ),
+        _ => return None,
+    };
+
+    Some(NovaIntentEnvelope {
+        id: intent_id,
+        source_agent,
+        scene,
+        target_service,
+        kind,
+        policy_hint,
+    })
+}
+
+pub fn project_command(
+    command: ShellCommand,
+    source_agent: NovaAgentId,
+    scene: NovaSceneId,
+    intent_id: u64,
+) -> Option<IntentPlan> {
+    let intent = intent_for_command(command, source_agent, scene, intent_id)?;
+    let plan = route_intent(intent);
+
+    match command {
+        ShellCommand::SwitchScene(target_scene) => Some(IntentPlan {
+            projection: nova_rt::NovaIntentProjection::new(
+                plan.intent_id,
+                plan.projection.target_service,
+                NovaIntentDispatch::SwitchScene(nova_rt::NovaSceneSwitchRequest::new(
+                    source_agent,
+                    scene,
+                    target_scene,
+                )),
+            ),
+            ..plan
+        }),
+        _ => Some(plan),
+    }
+}
+
 pub fn parse_command(input: &str) -> Result<ShellCommand, ShellCommandParseError> {
     match input.trim() {
         "" => Err(ShellCommandParseError::Empty),
@@ -153,5 +239,24 @@ const fn backend_platform(plan: AccelDispatchPlan) -> PlatformClass {
     match plan.selected_backend {
         Some(backend) => backend.platform_class,
         None => PlatformClass::Unknown,
+    }
+}
+
+const fn default_policy_hint_for_intent(kind: NovaIntentKind) -> NovaPolicyDecision {
+    match kind {
+        NovaIntentKind::RequestStatus => NovaPolicyDecision::Allow,
+        NovaIntentKind::LaunchService
+        | NovaIntentKind::OpenApp
+        | NovaIntentKind::SwitchScene
+        | NovaIntentKind::Custom => NovaPolicyDecision::Ask,
+    }
+}
+
+const fn intent_request_target(dispatch: NovaIntentDispatch) -> u64 {
+    match dispatch {
+        NovaIntentDispatch::LaunchService(request) => request.target.0,
+        NovaIntentDispatch::SwitchScene(request) => request.target_scene.0,
+        NovaIntentDispatch::AppAction(request) => request.app.0,
+        NovaIntentDispatch::Status(request) => request.target_service.0,
     }
 }

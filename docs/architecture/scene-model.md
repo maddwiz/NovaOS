@@ -9,7 +9,7 @@ Scenes are the durable interaction context above the kernel. A scene groups user
 - `libs/nova_rt::NovaSceneMode` exposes stable labels for shell/operator output.
 - `libs/nova_rt::NovaSceneSwitchRequest` carries typed scene-switch requests above the kernel.
 - `services/scened` owns the first scene record, binding model, manifest, checkpoint, restore plan, and scene-switch planner.
-- `services/shelld` can project scene descriptors into typed scene-list output lines without depending on `scened`.
+- `services/shelld` can project scene descriptors into typed scene-list output lines and now forwards `scene` operator commands into the shared scene-switch request path.
 
 ## Modes
 

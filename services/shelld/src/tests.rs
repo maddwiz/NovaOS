@@ -1,12 +1,13 @@
 use crate::{
     SHELLD_LAUNCH_SPEC, ShellCommand, ShellCommandParseError, describe_accel_dispatch,
-    describe_memory_placement, describe_scene, describe_service_status, parse_command,
+    describe_intent_plan, describe_memory_placement, describe_scene, describe_service_status,
+    intent_for_command, parse_command, project_command,
 };
 use nova_fabric::{MemoryTopologyClass, QueueClass};
 use nova_rt::{
-    NovaAgentId, NovaSceneDescriptor, NovaSceneId, NovaSceneMode, NovaServiceDescriptor,
-    NovaServiceId, NovaServiceKind, NovaServiceLaunchResult, NovaServiceLaunchStatus,
-    NovaServiceState, NovaServiceStatus,
+    NovaAgentId, NovaIntentDispatch, NovaIntentKind, NovaPolicyDecision, NovaSceneDescriptor,
+    NovaSceneId, NovaSceneMode, NovaServiceDescriptor, NovaServiceId, NovaServiceKind,
+    NovaServiceLaunchResult, NovaServiceLaunchStatus, NovaServiceState, NovaServiceStatus,
 };
 use novaos_acceld::{
     AccelDispatchPlan, AccelDispatchRequest, AccelDispatchStatus, BackendDescriptor,
@@ -72,6 +73,76 @@ fn parser_launches_interaction_and_bridge_services_by_name() {
         parse_command("launch shelld"),
         Ok(ShellCommand::LaunchService(NovaServiceId::SHELLD))
     );
+}
+
+#[test]
+fn shell_launch_command_projects_launch_service_intent() {
+    let plan = project_command(
+        ShellCommand::LaunchService(NovaServiceId::MEMD),
+        NovaAgentId::INIT,
+        NovaSceneId::ROOT,
+        11,
+    )
+    .expect("launch intent");
+    let line = describe_intent_plan(plan);
+
+    assert_eq!(plan.primary_service, NovaServiceId::SHELLD);
+    assert_eq!(line.intent_id, 11);
+    assert_eq!(line.target_service, NovaServiceId::SHELLD);
+    assert_eq!(line.dispatch, "launch-service");
+    assert_eq!(line.policy, "ask");
+    assert!(line.approval_required);
+    assert_eq!(line.request_target, NovaServiceId::MEMD.0);
+    match plan.projection.dispatch {
+        NovaIntentDispatch::LaunchService(request) => {
+            assert_eq!(request.requester, NovaServiceId::INTENTD);
+            assert_eq!(request.target, NovaServiceId::MEMD);
+        }
+        dispatch => panic!("unexpected dispatch: {dispatch:?}"),
+    }
+}
+
+#[test]
+fn shell_scene_command_projects_resolved_scene_switch_request() {
+    let plan = project_command(
+        ShellCommand::SwitchScene(NovaSceneId::ROOT),
+        NovaAgentId::new(7),
+        NovaSceneId::new(9),
+        12,
+    )
+    .expect("scene intent");
+    let line = describe_intent_plan(plan);
+
+    assert_eq!(line.dispatch, "switch-scene");
+    assert_eq!(line.policy, "ask");
+    assert!(line.approval_required);
+    assert_eq!(line.request_target, NovaSceneId::ROOT.0);
+    match plan.projection.dispatch {
+        NovaIntentDispatch::SwitchScene(request) => {
+            assert_eq!(request.requested_by, NovaAgentId::new(7));
+            assert_eq!(request.current_scene, NovaSceneId::new(9));
+            assert_eq!(request.target_scene, NovaSceneId::ROOT);
+            assert!(request.has_target());
+        }
+        dispatch => panic!("unexpected dispatch: {dispatch:?}"),
+    }
+}
+
+#[test]
+fn shell_status_command_projects_allow_status_intent() {
+    let command = ShellCommand::Intent(NovaIntentKind::RequestStatus);
+    let intent = intent_for_command(command, NovaAgentId::INIT, NovaSceneId::ROOT, 13)
+        .expect("status envelope");
+    let plan =
+        project_command(command, NovaAgentId::INIT, NovaSceneId::ROOT, 13).expect("status plan");
+    let line = describe_intent_plan(plan);
+
+    assert_eq!(intent.kind, NovaIntentKind::RequestStatus);
+    assert_eq!(intent.policy_hint, NovaPolicyDecision::Allow);
+    assert_eq!(line.dispatch, "status");
+    assert_eq!(line.policy, "allow");
+    assert!(!line.approval_required);
+    assert_eq!(line.request_target, NovaServiceId::SHELLD.0);
 }
 
 #[test]

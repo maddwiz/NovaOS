@@ -1,10 +1,11 @@
 use crate::{
     APPBRIDGED_LAUNCH_SPEC, AppBridgeCommand, AppBridgeManifest, AppBridgeStatus,
-    STANDARD_APP_ACTIONS, route_app_action, route_manifest_action,
+    STANDARD_APP_ACTIONS, route_app_action, route_app_request, route_manifest_action,
+    route_manifest_request,
 };
 use nova_rt::{
-    NovaAgentId, NovaAppActionKind, NovaAppBridgeKind, NovaAppDescriptor, NovaAppId, NovaSceneId,
-    NovaServiceId,
+    NovaAgentId, NovaAppActionKind, NovaAppActionRequest, NovaAppBridgeKind, NovaAppDescriptor,
+    NovaAppId, NovaSceneId, NovaServiceId,
 };
 
 #[test]
@@ -112,4 +113,68 @@ fn launch_spec_identifies_app_bridge_service() {
         NovaServiceId::APPBRIDGED
     );
     assert!(APPBRIDGED_LAUNCH_SPEC.is_valid());
+}
+
+#[test]
+fn projected_app_request_routes_matching_launches() {
+    let app = NovaAppDescriptor {
+        id: NovaAppId::new(400),
+        name: "mail",
+        bridge: NovaAppBridgeKind::Compatibility,
+        action_count: STANDARD_APP_ACTIONS.len() as u16,
+    };
+    let request = NovaAppActionRequest::new(
+        app.id,
+        NovaSceneId::ROOT,
+        NovaAgentId::INIT,
+        NovaAppActionKind::Launch,
+    );
+
+    assert_eq!(
+        route_app_request(app, request).status,
+        AppBridgeStatus::Queued
+    );
+}
+
+#[test]
+fn projected_manifest_request_marks_request_action_as_approval_needed() {
+    let app = NovaAppDescriptor {
+        id: NovaAppId::new(500),
+        name: "music",
+        bridge: NovaAppBridgeKind::Remote,
+        action_count: STANDARD_APP_ACTIONS.len() as u16,
+    };
+    let manifest = AppBridgeManifest::new(app, STANDARD_APP_ACTIONS);
+    let request = NovaAppActionRequest::new(
+        app.id,
+        NovaSceneId::ROOT,
+        NovaAgentId::INIT,
+        NovaAppActionKind::RequestAction,
+    );
+
+    assert_eq!(
+        route_manifest_request(manifest, request).status,
+        AppBridgeStatus::NeedsApproval
+    );
+}
+
+#[test]
+fn projected_request_without_app_target_is_unsupported() {
+    let app = NovaAppDescriptor {
+        id: NovaAppId::new(600),
+        name: "calendar",
+        bridge: NovaAppBridgeKind::Native,
+        action_count: STANDARD_APP_ACTIONS.len() as u16,
+    };
+    let manifest = AppBridgeManifest::new(app, STANDARD_APP_ACTIONS);
+    let request = NovaAppActionRequest::unresolved(
+        NovaSceneId::ROOT,
+        NovaAgentId::INIT,
+        NovaAppActionKind::Open,
+    );
+
+    assert_eq!(
+        route_manifest_request(manifest, request).status,
+        AppBridgeStatus::Unsupported
+    );
 }

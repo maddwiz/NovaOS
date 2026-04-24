@@ -1,5 +1,6 @@
 use nova_rt::{
-    NovaAgentId, NovaAppActionKind, NovaAppDescriptor, NovaAppId, NovaSceneId, NovaServiceId,
+    NovaAgentId, NovaAppActionKind, NovaAppActionRequest, NovaAppDescriptor, NovaAppId,
+    NovaSceneId, NovaServiceId,
 };
 
 pub const STANDARD_APP_ACTIONS: &[NovaAppActionKind] = &[
@@ -100,6 +101,15 @@ pub struct AppBridgeResult {
     pub status: AppBridgeStatus,
 }
 
+pub const fn app_request_command(request: NovaAppActionRequest) -> AppBridgeCommand {
+    AppBridgeCommand {
+        app: request.app,
+        scene: request.scene,
+        requested_by: request.requested_by,
+        action: request.action,
+    }
+}
+
 pub const fn route_app_action(
     descriptor: NovaAppDescriptor,
     command: AppBridgeCommand,
@@ -123,6 +133,21 @@ pub const fn route_app_action(
     }
 }
 
+pub const fn route_app_request(
+    descriptor: NovaAppDescriptor,
+    request: NovaAppActionRequest,
+) -> AppBridgeResult {
+    if !request.has_target_app() {
+        return AppBridgeResult {
+            app: request.app,
+            handled_by: NovaServiceId::APPBRIDGED,
+            status: AppBridgeStatus::Unsupported,
+        };
+    }
+
+    route_app_action(descriptor, app_request_command(request))
+}
+
 pub const fn route_manifest_action(
     manifest: AppBridgeManifest,
     command: AppBridgeCommand,
@@ -142,4 +167,19 @@ pub const fn route_manifest_action(
         handled_by: NovaServiceId::APPBRIDGED,
         status,
     }
+}
+
+pub const fn route_manifest_request(
+    manifest: AppBridgeManifest,
+    request: NovaAppActionRequest,
+) -> AppBridgeResult {
+    if !request.has_target_app() {
+        return AppBridgeResult {
+            app: request.app,
+            handled_by: NovaServiceId::APPBRIDGED,
+            status: AppBridgeStatus::Unsupported,
+        };
+    }
+
+    route_manifest_action(manifest, app_request_command(request))
 }

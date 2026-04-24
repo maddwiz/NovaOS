@@ -1,4 +1,6 @@
-use nova_rt::{NovaAgentId, NovaAppId, NovaSceneDescriptor, NovaSceneId, NovaSceneMode};
+use nova_rt::{
+    NovaAgentId, NovaAppId, NovaSceneDescriptor, NovaSceneId, NovaSceneMode, NovaSceneSwitchRequest,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u16)]
@@ -136,6 +138,66 @@ pub const fn restore_scene(manifest: SceneManifest) -> SceneRestorePlan {
 
     SceneRestorePlan {
         scene: manifest.record.descriptor.id,
+        status,
+        checkpoint: manifest.checkpoint(),
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u16)]
+pub enum SceneSwitchStatus {
+    Ready = 1,
+    AlreadyActive = 2,
+    MissingTargetScene = 3,
+    UnknownTargetScene = 4,
+    RestoreBlocked = 5,
+}
+
+impl SceneSwitchStatus {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::AlreadyActive => "already-active",
+            Self::MissingTargetScene => "missing-target-scene",
+            Self::UnknownTargetScene => "unknown-target-scene",
+            Self::RestoreBlocked => "restore-blocked",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SceneSwitchPlan {
+    pub request: NovaSceneSwitchRequest,
+    pub target_scene: NovaSceneId,
+    pub status: SceneSwitchStatus,
+    pub checkpoint: SceneCheckpoint,
+}
+
+impl SceneSwitchPlan {
+    pub const fn ready(self) -> bool {
+        matches!(self.status, SceneSwitchStatus::Ready)
+    }
+}
+
+pub const fn plan_scene_switch(
+    manifest: SceneManifest,
+    request: NovaSceneSwitchRequest,
+) -> SceneSwitchPlan {
+    let status = if !request.has_target() {
+        SceneSwitchStatus::MissingTargetScene
+    } else if request.current_scene.0 == request.target_scene.0 {
+        SceneSwitchStatus::AlreadyActive
+    } else if manifest.record.descriptor.id.0 != request.target_scene.0 {
+        SceneSwitchStatus::UnknownTargetScene
+    } else if !manifest.can_restore() {
+        SceneSwitchStatus::RestoreBlocked
+    } else {
+        SceneSwitchStatus::Ready
+    };
+
+    SceneSwitchPlan {
+        request,
+        target_scene: request.target_scene,
         status,
         checkpoint: manifest.checkpoint(),
     }

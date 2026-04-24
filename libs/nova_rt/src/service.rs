@@ -50,6 +50,10 @@ impl NovaSceneId {
     pub const fn new(raw: u64) -> Self {
         Self(raw)
     }
+
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -59,6 +63,10 @@ pub struct NovaAppId(pub u64);
 impl NovaAppId {
     pub const fn new(raw: u64) -> Self {
         Self(raw)
+    }
+
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
     }
 }
 
@@ -596,6 +604,121 @@ pub struct NovaIntentEnvelope {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NovaSceneSwitchRequest {
+    pub requested_by: NovaAgentId,
+    pub current_scene: NovaSceneId,
+    pub target_scene: NovaSceneId,
+}
+
+impl NovaSceneSwitchRequest {
+    pub const fn new(
+        requested_by: NovaAgentId,
+        current_scene: NovaSceneId,
+        target_scene: NovaSceneId,
+    ) -> Self {
+        Self {
+            requested_by,
+            current_scene,
+            target_scene,
+        }
+    }
+
+    pub const fn unresolved(requested_by: NovaAgentId, current_scene: NovaSceneId) -> Self {
+        Self::new(requested_by, current_scene, NovaSceneId::new(0))
+    }
+
+    pub const fn has_target(self) -> bool {
+        !self.target_scene.is_empty()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NovaAppActionRequest {
+    pub app: NovaAppId,
+    pub scene: NovaSceneId,
+    pub requested_by: NovaAgentId,
+    pub action: NovaAppActionKind,
+}
+
+impl NovaAppActionRequest {
+    pub const fn new(
+        app: NovaAppId,
+        scene: NovaSceneId,
+        requested_by: NovaAgentId,
+        action: NovaAppActionKind,
+    ) -> Self {
+        Self {
+            app,
+            scene,
+            requested_by,
+            action,
+        }
+    }
+
+    pub const fn unresolved(
+        scene: NovaSceneId,
+        requested_by: NovaAgentId,
+        action: NovaAppActionKind,
+    ) -> Self {
+        Self::new(NovaAppId::new(0), scene, requested_by, action)
+    }
+
+    pub const fn has_target_app(self) -> bool {
+        !self.app.is_empty()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NovaStatusRequest {
+    pub requested_by: NovaAgentId,
+    pub scene: NovaSceneId,
+    pub target_service: NovaServiceId,
+}
+
+impl NovaStatusRequest {
+    pub const fn new(
+        requested_by: NovaAgentId,
+        scene: NovaSceneId,
+        target_service: NovaServiceId,
+    ) -> Self {
+        Self {
+            requested_by,
+            scene,
+            target_service,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NovaIntentDispatch {
+    LaunchService(NovaServiceLaunchRequest),
+    SwitchScene(NovaSceneSwitchRequest),
+    AppAction(NovaAppActionRequest),
+    Status(NovaStatusRequest),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NovaIntentProjection {
+    pub intent_id: u64,
+    pub target_service: NovaServiceId,
+    pub dispatch: NovaIntentDispatch,
+}
+
+impl NovaIntentProjection {
+    pub const fn new(
+        intent_id: u64,
+        target_service: NovaServiceId,
+        dispatch: NovaIntentDispatch,
+    ) -> Self {
+        Self {
+            intent_id,
+            target_service,
+            dispatch,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u16)]
 pub enum NovaSceneMode {
     Consumer = 1,
@@ -674,12 +797,14 @@ pub struct NovaAppDescriptor {
 #[cfg(test)]
 mod tests {
     use super::{
-        NovaAppActionKind, NovaAppBridgeKind, NovaEndpointId, NovaIntentKind, NovaPolicyAction,
+        NovaAppActionKind, NovaAppActionRequest, NovaAppBridgeKind, NovaEndpointId,
+        NovaIntentDispatch, NovaIntentKind, NovaIntentProjection, NovaPolicyAction,
         NovaPolicyDecision, NovaPolicyRequest, NovaPolicyScope, NovaSceneMode,
-        NovaServiceBindingState, NovaServiceBootstrapRequirement, NovaServiceId,
-        NovaServiceKernelBinding, NovaServiceKernelLaunchPlan, NovaServiceKind,
+        NovaSceneSwitchRequest, NovaServiceBindingState, NovaServiceBootstrapRequirement,
+        NovaServiceId, NovaServiceKernelBinding, NovaServiceKernelLaunchPlan, NovaServiceKind,
         NovaServiceLaunchRequest, NovaServiceLaunchResult, NovaServiceLaunchSpec,
-        NovaServiceLaunchStatus, NovaServiceStatus, NovaSharedMemoryRegionId, NovaTaskId,
+        NovaServiceLaunchStatus, NovaServiceStatus, NovaSharedMemoryRegionId, NovaStatusRequest,
+        NovaTaskId,
     };
 
     #[test]
@@ -894,5 +1019,47 @@ mod tests {
             NovaPolicyScope::Service(NovaServiceId::APPBRIDGED)
         );
         assert_eq!(NovaPolicyDecision::Ask as u16, 3);
+    }
+
+    #[test]
+    fn intent_projection_requests_track_empty_and_resolved_targets() {
+        let unresolved_scene =
+            NovaSceneSwitchRequest::unresolved(super::NovaAgentId::INIT, super::NovaSceneId::ROOT);
+        let unresolved_app = NovaAppActionRequest::unresolved(
+            super::NovaSceneId::ROOT,
+            super::NovaAgentId::INIT,
+            NovaAppActionKind::Open,
+        );
+        let status = NovaStatusRequest::new(
+            super::NovaAgentId::INIT,
+            super::NovaSceneId::ROOT,
+            NovaServiceId::SHELLD,
+        );
+
+        assert!(!unresolved_scene.has_target());
+        assert!(!unresolved_app.has_target_app());
+        assert_eq!(status.target_service, NovaServiceId::SHELLD);
+    }
+
+    #[test]
+    fn intent_projection_carries_typed_dispatch_payloads() {
+        let launch = NovaServiceLaunchRequest::new(
+            NovaServiceId::INTENTD,
+            NovaServiceId::AGENTD,
+            super::NovaSceneId::ROOT,
+            0,
+        );
+        let projection = NovaIntentProjection::new(
+            7,
+            NovaServiceId::AGENTD,
+            NovaIntentDispatch::LaunchService(launch),
+        );
+
+        assert_eq!(projection.intent_id, 7);
+        assert_eq!(projection.target_service, NovaServiceId::AGENTD);
+        assert_eq!(
+            projection.dispatch,
+            NovaIntentDispatch::LaunchService(launch)
+        );
     }
 }

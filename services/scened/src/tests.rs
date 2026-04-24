@@ -1,8 +1,9 @@
 use crate::{
     ROOT_SCENE_BINDINGS, SCENED_LAUNCH_SPEC, SceneBinding, SceneBindingKind, SceneManifest,
-    SceneRestoreStatus, restore_scene, root_scene, root_scene_manifest,
+    SceneRestoreStatus, SceneSwitchStatus, plan_scene_switch, restore_scene, root_scene,
+    root_scene_manifest,
 };
-use nova_rt::{NovaAgentId, NovaSceneId, NovaServiceId};
+use nova_rt::{NovaAgentId, NovaSceneId, NovaSceneSwitchRequest, NovaServiceId};
 
 #[test]
 fn root_scene_is_restore_ready() {
@@ -64,4 +65,54 @@ fn restore_plan_rejects_binding_count_mismatch() {
     assert!(!manifest.binding_count_matches());
     assert_eq!(plan.status, SceneRestoreStatus::BindingMismatch);
     assert_eq!(plan.status.label(), "binding-mismatch");
+}
+
+#[test]
+fn scene_switch_plan_is_ready_for_known_restorable_target() {
+    let manifest = root_scene_manifest();
+    let request =
+        NovaSceneSwitchRequest::new(NovaAgentId::INIT, NovaSceneId::new(9), NovaSceneId::ROOT);
+    let plan = plan_scene_switch(manifest, request);
+
+    assert!(plan.ready());
+    assert_eq!(plan.status, SceneSwitchStatus::Ready);
+    assert_eq!(plan.status.label(), "ready");
+    assert_eq!(plan.target_scene, NovaSceneId::ROOT);
+}
+
+#[test]
+fn scene_switch_plan_detects_already_active_target() {
+    let manifest = root_scene_manifest();
+    let request =
+        NovaSceneSwitchRequest::new(NovaAgentId::INIT, NovaSceneId::ROOT, NovaSceneId::ROOT);
+    let plan = plan_scene_switch(manifest, request);
+
+    assert!(!plan.ready());
+    assert_eq!(plan.status, SceneSwitchStatus::AlreadyActive);
+    assert_eq!(plan.status.label(), "already-active");
+}
+
+#[test]
+fn scene_switch_plan_rejects_unresolved_target_scene() {
+    let manifest = root_scene_manifest();
+    let request = NovaSceneSwitchRequest::unresolved(NovaAgentId::INIT, NovaSceneId::ROOT);
+    let plan = plan_scene_switch(manifest, request);
+
+    assert!(!plan.ready());
+    assert_eq!(plan.status, SceneSwitchStatus::MissingTargetScene);
+    assert_eq!(plan.status.label(), "missing-target-scene");
+}
+
+#[test]
+fn scene_switch_plan_rejects_restore_blocked_target() {
+    let mut scene = root_scene();
+    scene.saved_generation = 0;
+    let manifest = SceneManifest::new(scene, ROOT_SCENE_BINDINGS);
+    let request =
+        NovaSceneSwitchRequest::new(NovaAgentId::INIT, NovaSceneId::new(9), NovaSceneId::ROOT);
+    let plan = plan_scene_switch(manifest, request);
+
+    assert!(!plan.ready());
+    assert_eq!(plan.status, SceneSwitchStatus::RestoreBlocked);
+    assert_eq!(plan.status.label(), "restore-blocked");
 }

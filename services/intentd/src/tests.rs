@@ -2,8 +2,8 @@ use crate::{
     INTENTD_LAUNCH_SPEC, policy_request_for_intent, route_intent, route_intent_with_policy,
 };
 use nova_rt::{
-    NovaAgentId, NovaIntentEnvelope, NovaIntentKind, NovaPolicyAction, NovaPolicyDecision,
-    NovaPolicyScope, NovaSceneId, NovaServiceId,
+    NovaAgentId, NovaIntentDispatch, NovaIntentEnvelope, NovaIntentKind, NovaPolicyAction,
+    NovaPolicyDecision, NovaPolicyScope, NovaSceneId, NovaServiceId,
 };
 
 #[test]
@@ -18,6 +18,15 @@ fn open_app_intent_routes_to_app_bridge() {
     });
 
     assert_eq!(plan.primary_service, NovaServiceId::APPBRIDGED);
+    assert_eq!(plan.projection.target_service, NovaServiceId::APPBRIDGED);
+    match plan.projection.dispatch {
+        NovaIntentDispatch::AppAction(request) => {
+            assert_eq!(request.scene, NovaSceneId::ROOT);
+            assert_eq!(request.requested_by, NovaAgentId::INIT);
+            assert!(!request.has_target_app());
+        }
+        dispatch => panic!("unexpected dispatch: {dispatch:?}"),
+    }
     assert!(plan.requires_approval);
 }
 
@@ -33,6 +42,14 @@ fn status_intent_routes_to_shell() {
     });
 
     assert_eq!(plan.primary_service, NovaServiceId::SHELLD);
+    assert_eq!(plan.projection.target_service, NovaServiceId::SHELLD);
+    match plan.projection.dispatch {
+        NovaIntentDispatch::Status(request) => {
+            assert_eq!(request.scene, NovaSceneId::ROOT);
+            assert_eq!(request.target_service, NovaServiceId::SHELLD);
+        }
+        dispatch => panic!("unexpected dispatch: {dispatch:?}"),
+    }
     assert!(!plan.requires_approval);
 }
 
@@ -49,6 +66,13 @@ fn switch_scene_intent_routes_to_scene_service() {
 
     assert_eq!(plan.primary_service, NovaServiceId::SCENED);
     assert_eq!(plan.step.target_service, NovaServiceId::SCENED);
+    match plan.projection.dispatch {
+        NovaIntentDispatch::SwitchScene(request) => {
+            assert_eq!(request.current_scene, NovaSceneId::ROOT);
+            assert!(!request.has_target());
+        }
+        dispatch => panic!("unexpected dispatch: {dispatch:?}"),
+    }
     assert!(plan.requires_approval);
 }
 
@@ -65,6 +89,30 @@ fn explicit_target_overrides_default_route() {
 
     assert_eq!(plan.primary_service, NovaServiceId::AGENTD);
     assert_eq!(plan.step.target_service, NovaServiceId::AGENTD);
+    assert_eq!(plan.projection.target_service, NovaServiceId::AGENTD);
+}
+
+#[test]
+fn launch_service_intent_projects_service_launch_request() {
+    let plan = route_intent(NovaIntentEnvelope {
+        id: 7,
+        source_agent: NovaAgentId::INIT,
+        scene: NovaSceneId::ROOT,
+        target_service: NovaServiceId::MEMD,
+        kind: NovaIntentKind::LaunchService,
+        policy_hint: NovaPolicyDecision::Allow,
+    });
+
+    assert_eq!(plan.primary_service, NovaServiceId::SHELLD);
+    assert_eq!(plan.projection.target_service, NovaServiceId::SHELLD);
+    match plan.projection.dispatch {
+        NovaIntentDispatch::LaunchService(request) => {
+            assert_eq!(request.requester, NovaServiceId::INTENTD);
+            assert_eq!(request.target, NovaServiceId::MEMD);
+            assert_eq!(request.scene, NovaSceneId::ROOT);
+        }
+        dispatch => panic!("unexpected dispatch: {dispatch:?}"),
+    }
 }
 
 #[test]
@@ -103,6 +151,7 @@ fn route_with_policy_decision_replaces_hint() {
 
     assert_eq!(plan.primary_service, NovaServiceId::SHELLD);
     assert_eq!(plan.step.policy, NovaPolicyDecision::Ask);
+    assert_eq!(plan.projection.target_service, NovaServiceId::SHELLD);
     assert!(plan.requires_approval);
 }
 

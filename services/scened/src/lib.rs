@@ -6,8 +6,8 @@ pub mod types;
 pub use launch::{SCENED_DESCRIPTOR, SCENED_LAUNCH_SPEC};
 pub use types::{
     ROOT_SCENE_BINDINGS, SceneBinding, SceneBindingKind, SceneCheckpoint, SceneManifest,
-    SceneRecord, SceneRestorePlan, SceneRestoreStatus, restore_scene, root_scene,
-    root_scene_manifest,
+    SceneRecord, SceneRestorePlan, SceneRestoreStatus, SceneSwitchPlan, SceneSwitchStatus,
+    plan_scene_switch, restore_scene, root_scene, root_scene_manifest,
 };
 
 #[cfg(test)]

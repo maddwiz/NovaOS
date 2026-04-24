@@ -8,8 +8,9 @@
 - `libs/nova_rt::NovaAppDescriptor` records bridge kind and action count.
 - `libs/nova_rt::NovaAppBridgeKind` and `libs/nova_rt::NovaAppActionKind` expose stable labels for operator/service output.
 - `libs/nova_rt::NovaAppActionKind` covers `launch`, `open`, `focus`, `close`, and `request-action`.
+- `libs/nova_rt::NovaAppActionRequest` carries typed app-action requests above the kernel.
 - `services/appbridged` owns `AppBridgeManifest`, which binds an app descriptor to its supported action list.
-- `services/appbridged` routes manifest-backed app actions into queued, approval-needed, or unsupported results.
+- `services/appbridged` routes manifest-backed app actions into queued, approval-needed, or unsupported results, including shared `NovaAppActionRequest` inputs projected by `intentd`.
 
 ## Boundaries
 

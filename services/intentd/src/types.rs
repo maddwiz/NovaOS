@@ -1,6 +1,8 @@
 use nova_rt::{
-    NovaIntentEnvelope, NovaIntentKind, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest,
-    NovaPolicyScope, NovaServiceId, NovaServiceLaunchStatus,
+    NovaAppActionKind, NovaAppActionRequest, NovaIntentDispatch, NovaIntentEnvelope,
+    NovaIntentKind, NovaIntentProjection, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest,
+    NovaPolicyScope, NovaSceneSwitchRequest, NovaServiceId, NovaServiceLaunchRequest,
+    NovaServiceLaunchStatus, NovaStatusRequest,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -15,6 +17,7 @@ pub struct IntentPlan {
     pub intent_id: u64,
     pub primary_service: NovaServiceId,
     pub step: IntentPlanStep,
+    pub projection: NovaIntentProjection,
     pub requires_approval: bool,
 }
 
@@ -47,16 +50,7 @@ pub const fn route_intent_with_policy(
 }
 
 pub const fn route_intent(intent: NovaIntentEnvelope) -> IntentPlan {
-    let primary_service = if !intent.target_service.is_empty() {
-        intent.target_service
-    } else {
-        match intent.kind {
-            NovaIntentKind::LaunchService | NovaIntentKind::RequestStatus => NovaServiceId::SHELLD,
-            NovaIntentKind::OpenApp => NovaServiceId::APPBRIDGED,
-            NovaIntentKind::SwitchScene => NovaServiceId::SCENED,
-            NovaIntentKind::Custom => NovaServiceId::AGENTD,
-        }
-    };
+    let primary_service = resolve_primary_service(intent);
     let requires_approval = matches!(intent.policy_hint, NovaPolicyDecision::Ask);
 
     IntentPlan {
@@ -67,6 +61,60 @@ pub const fn route_intent(intent: NovaIntentEnvelope) -> IntentPlan {
             policy: intent.policy_hint,
             launch_status: NovaServiceLaunchStatus::Deferred,
         },
+        projection: project_intent(intent, primary_service),
         requires_approval,
+    }
+}
+
+const fn resolve_primary_service(intent: NovaIntentEnvelope) -> NovaServiceId {
+    if !intent.target_service.is_empty() && !matches!(intent.kind, NovaIntentKind::LaunchService) {
+        intent.target_service
+    } else {
+        match intent.kind {
+            NovaIntentKind::LaunchService | NovaIntentKind::RequestStatus => NovaServiceId::SHELLD,
+            NovaIntentKind::OpenApp => NovaServiceId::APPBRIDGED,
+            NovaIntentKind::SwitchScene => NovaServiceId::SCENED,
+            NovaIntentKind::Custom => NovaServiceId::AGENTD,
+        }
+    }
+}
+
+const fn project_intent(
+    intent: NovaIntentEnvelope,
+    primary_service: NovaServiceId,
+) -> NovaIntentProjection {
+    let dispatch = match intent.kind {
+        NovaIntentKind::LaunchService => {
+            NovaIntentDispatch::LaunchService(NovaServiceLaunchRequest::new(
+                NovaServiceId::INTENTD,
+                resolve_launch_target(intent, primary_service),
+                intent.scene,
+                0,
+            ))
+        }
+        NovaIntentKind::OpenApp => NovaIntentDispatch::AppAction(NovaAppActionRequest::unresolved(
+            intent.scene,
+            intent.source_agent,
+            NovaAppActionKind::Open,
+        )),
+        NovaIntentKind::SwitchScene => NovaIntentDispatch::SwitchScene(
+            NovaSceneSwitchRequest::unresolved(intent.source_agent, intent.scene),
+        ),
+        NovaIntentKind::RequestStatus | NovaIntentKind::Custom => NovaIntentDispatch::Status(
+            NovaStatusRequest::new(intent.source_agent, intent.scene, primary_service),
+        ),
+    };
+
+    NovaIntentProjection::new(intent.id, primary_service, dispatch)
+}
+
+const fn resolve_launch_target(
+    intent: NovaIntentEnvelope,
+    primary_service: NovaServiceId,
+) -> NovaServiceId {
+    if !intent.target_service.is_empty() {
+        intent.target_service
+    } else {
+        primary_service
     }
 }

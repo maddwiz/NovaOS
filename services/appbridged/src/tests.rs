@@ -1,11 +1,11 @@
 use crate::{
-    APPBRIDGED_LAUNCH_SPEC, AppBridgeCommand, AppBridgeManifest, AppBridgeStatus,
-    STANDARD_APP_ACTIONS, route_app_action, route_app_request, route_manifest_action,
-    route_manifest_request,
+    APPBRIDGED_LAUNCH_SPEC, APPBRIDGED_PAYLOAD_SPEC, AppBridgeCommand, AppBridgeManifest,
+    AppBridgeStatus, STANDARD_APP_ACTIONS, route_app_action, route_app_request,
+    route_manifest_action, route_manifest_request,
 };
 use nova_rt::{
     NovaAgentId, NovaAppActionKind, NovaAppActionRequest, NovaAppBridgeKind, NovaAppDescriptor,
-    NovaAppId, NovaSceneId, NovaServiceId,
+    NovaAppId, NovaPayloadEntryAbi, NovaPayloadKind, NovaSceneId, NovaServiceId,
 };
 
 #[test]
@@ -113,6 +113,20 @@ fn launch_spec_identifies_app_bridge_service() {
         NovaServiceId::APPBRIDGED
     );
     assert!(APPBRIDGED_LAUNCH_SPEC.is_valid());
+    assert_eq!(
+        APPBRIDGED_LAUNCH_SPEC.artifact,
+        Some(APPBRIDGED_PAYLOAD_SPEC)
+    );
+    assert_eq!(APPBRIDGED_PAYLOAD_SPEC.image_stem, "appbridged-payload");
+    assert_eq!(
+        APPBRIDGED_PAYLOAD_SPEC.payload_kind,
+        NovaPayloadKind::Service
+    );
+    assert_eq!(
+        APPBRIDGED_PAYLOAD_SPEC.entry_abi,
+        NovaPayloadEntryAbi::BootstrapTaskV1
+    );
+    assert!(!APPBRIDGED_PAYLOAD_SPEC.embedded_in_init_capsule);
 }
 
 #[test]

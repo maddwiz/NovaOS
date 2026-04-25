@@ -7,7 +7,7 @@ pub mod launch;
 pub use dispatch::{
     AccelDispatchPlan, AccelDispatchRequest, AccelDispatchStatus, plan_accel_dispatch,
 };
-pub use launch::{ACCELD_DESCRIPTOR, ACCELD_LAUNCH_SPEC};
+pub use launch::{ACCELD_DESCRIPTOR, ACCELD_LAUNCH_SPEC, ACCELD_PAYLOAD_SPEC};
 
 use nova_fabric::{AccelSeedV1, FabricCapabilityFlags, PlatformClass, QueueClass};
 
@@ -39,11 +39,11 @@ pub fn describe_backend(backend: &dyn AccelBackend) -> BackendDescriptor {
 #[cfg(test)]
 mod tests {
     use super::{
-        ACCELD_LAUNCH_SPEC, AccelBackend, AccelDispatchRequest, AccelDispatchStatus, backends,
-        describe_backend, plan_accel_dispatch,
+        ACCELD_LAUNCH_SPEC, ACCELD_PAYLOAD_SPEC, AccelBackend, AccelDispatchRequest,
+        AccelDispatchStatus, backends, describe_backend, plan_accel_dispatch,
     };
     use nova_fabric::{AccelSeedV1, AccelTopologyHint, AccelTransport, PlatformClass, QueueClass};
-    use nova_rt::NovaServiceId;
+    use nova_rt::{NovaPayloadEntryAbi, NovaPayloadKind, NovaServiceId};
 
     #[test]
     fn cpu_backend_is_present_for_all_platforms() {
@@ -70,6 +70,13 @@ mod tests {
     fn launch_spec_identifies_accel_service() {
         assert_eq!(ACCELD_LAUNCH_SPEC.descriptor.id, NovaServiceId::ACCELD);
         assert!(ACCELD_LAUNCH_SPEC.is_valid());
+        assert_eq!(ACCELD_LAUNCH_SPEC.artifact, Some(ACCELD_PAYLOAD_SPEC));
+        assert_eq!(ACCELD_PAYLOAD_SPEC.image_stem, "acceld-payload");
+        assert_eq!(ACCELD_PAYLOAD_SPEC.payload_kind, NovaPayloadKind::Service);
+        assert_eq!(
+            ACCELD_PAYLOAD_SPEC.entry_abi,
+            NovaPayloadEntryAbi::BootstrapTaskV1
+        );
     }
 
     #[test]

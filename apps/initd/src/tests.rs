@@ -178,11 +178,28 @@ fn runtime_report_keeps_optional_shell_deferred_and_model_only() {
     assert_eq!(service.policy_decision().label(), "allow");
     assert_eq!(service.policy_audit.sequence, 8);
     assert_eq!(service.policy_audit.matched_rule_index, 7);
-    assert_eq!(service.artifact, None);
+    assert_eq!(
+        service.artifact.expect("shelld artifact").image_stem,
+        "shelld-payload"
+    );
     assert_eq!(service.kernel_binding.state.label(), "model-only");
     assert!(!service.descriptor.required);
     assert!(service.is_required_healthy());
     assert!(!service.has_kernel_objects());
+}
+
+#[test]
+fn core_launch_plan_carries_unique_artifacts_for_all_services() {
+    let plan = core_launch_plan();
+    let mut artifact_count = 0usize;
+
+    for spec in plan.specs {
+        let artifact = spec.artifact.expect("service artifact");
+        assert!(artifact.image_stem.ends_with("-payload"));
+        artifact_count += 1;
+    }
+
+    assert_eq!(artifact_count, plan.service_count());
 }
 
 #[test]

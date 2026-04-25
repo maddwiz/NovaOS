@@ -1,9 +1,12 @@
 use crate::{
-    ROOT_SCENE_BINDINGS, SCENED_LAUNCH_SPEC, SceneBinding, SceneBindingKind, SceneManifest,
-    SceneRestoreStatus, SceneSwitchStatus, plan_scene_switch, restore_scene, root_scene,
-    root_scene_manifest,
+    ROOT_SCENE_BINDINGS, SCENED_LAUNCH_SPEC, SCENED_PAYLOAD_SPEC, SceneBinding, SceneBindingKind,
+    SceneManifest, SceneRestoreStatus, SceneSwitchStatus, plan_scene_switch, restore_scene,
+    root_scene, root_scene_manifest,
 };
-use nova_rt::{NovaAgentId, NovaSceneId, NovaSceneSwitchRequest, NovaServiceId};
+use nova_rt::{
+    NovaAgentId, NovaPayloadEntryAbi, NovaPayloadKind, NovaSceneId, NovaSceneSwitchRequest,
+    NovaServiceId,
+};
 
 #[test]
 fn root_scene_is_restore_ready() {
@@ -18,6 +21,14 @@ fn root_scene_is_restore_ready() {
 fn launch_spec_identifies_scene_service() {
     assert_eq!(SCENED_LAUNCH_SPEC.descriptor.id, NovaServiceId::SCENED);
     assert!(SCENED_LAUNCH_SPEC.is_valid());
+    assert_eq!(SCENED_LAUNCH_SPEC.artifact, Some(SCENED_PAYLOAD_SPEC));
+    assert_eq!(SCENED_PAYLOAD_SPEC.image_stem, "scened-payload");
+    assert_eq!(SCENED_PAYLOAD_SPEC.payload_kind, NovaPayloadKind::Service);
+    assert_eq!(
+        SCENED_PAYLOAD_SPEC.entry_abi,
+        NovaPayloadEntryAbi::BootstrapTaskV1
+    );
+    assert!(!SCENED_PAYLOAD_SPEC.embedded_in_init_capsule);
 }
 
 #[test]

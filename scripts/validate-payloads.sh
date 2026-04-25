@@ -13,7 +13,27 @@ if [ "${PROFILE}" = "release" ]; then
 fi
 
 PROFILE="${PROFILE}" bash "${ROOT_DIR}/scripts/build-initd.sh" >/dev/null
-PROFILE="${PROFILE}" bash "${ROOT_DIR}/scripts/build-policyd.sh" >/dev/null
+
+build_runtime_service_payload() {
+  local crate_dir="$1"
+  local bin_name="$2"
+  local stem="$3"
+
+  CRATE_DIR="${ROOT_DIR}/${crate_dir}" \
+    BIN_NAME="${bin_name}" \
+    OUTPUT_STEM="${stem}" \
+    PROFILE="${PROFILE}" \
+    bash "${ROOT_DIR}/scripts/build-service-payload.sh" >/dev/null
+}
+
+build_runtime_service_payload "services/policyd" "policyd-payload" "policyd-payload"
+build_runtime_service_payload "services/agentd" "agentd-payload" "agentd-payload"
+build_runtime_service_payload "services/memd" "memd-payload" "memd-payload"
+build_runtime_service_payload "services/acceld" "acceld-payload" "acceld-payload"
+build_runtime_service_payload "services/intentd" "intentd-payload" "intentd-payload"
+build_runtime_service_payload "services/scened" "scened-payload" "scened-payload"
+build_runtime_service_payload "services/appbridged" "appbridged-payload" "appbridged-payload"
+build_runtime_service_payload "services/shelld" "shelld-payload" "shelld-payload"
 
 check_payload() {
   local stem="$1"
@@ -57,3 +77,10 @@ check_payload "stage1-payload" "stage1"
 check_payload "kernel-payload" "kernel"
 check_payload "initd-payload" "service"
 check_payload "policyd-payload" "service"
+check_payload "agentd-payload" "service"
+check_payload "memd-payload" "service"
+check_payload "acceld-payload" "service"
+check_payload "intentd-payload" "service"
+check_payload "scened-payload" "service"
+check_payload "appbridged-payload" "service"
+check_payload "shelld-payload" "service"

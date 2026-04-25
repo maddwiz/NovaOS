@@ -1,9 +1,11 @@
 use crate::{
-    INTENTD_LAUNCH_SPEC, policy_request_for_intent, route_intent, route_intent_with_policy,
+    INTENTD_LAUNCH_SPEC, INTENTD_PAYLOAD_SPEC, policy_request_for_intent, route_intent,
+    route_intent_with_policy,
 };
 use nova_rt::{
-    NovaAgentId, NovaIntentDispatch, NovaIntentEnvelope, NovaIntentKind, NovaPolicyAction,
-    NovaPolicyDecision, NovaPolicyScope, NovaSceneId, NovaServiceId,
+    NovaAgentId, NovaIntentDispatch, NovaIntentEnvelope, NovaIntentKind, NovaPayloadEntryAbi,
+    NovaPayloadKind, NovaPolicyAction, NovaPolicyDecision, NovaPolicyScope, NovaSceneId,
+    NovaServiceId,
 };
 
 #[test]
@@ -159,4 +161,12 @@ fn route_with_policy_decision_replaces_hint() {
 fn launch_spec_identifies_intent_service() {
     assert_eq!(INTENTD_LAUNCH_SPEC.descriptor.id, NovaServiceId::INTENTD);
     assert!(INTENTD_LAUNCH_SPEC.is_valid());
+    assert_eq!(INTENTD_LAUNCH_SPEC.artifact, Some(INTENTD_PAYLOAD_SPEC));
+    assert_eq!(INTENTD_PAYLOAD_SPEC.image_stem, "intentd-payload");
+    assert_eq!(INTENTD_PAYLOAD_SPEC.payload_kind, NovaPayloadKind::Service);
+    assert_eq!(
+        INTENTD_PAYLOAD_SPEC.entry_abi,
+        NovaPayloadEntryAbi::BootstrapTaskV1
+    );
+    assert!(!INTENTD_PAYLOAD_SPEC.embedded_in_init_capsule);
 }

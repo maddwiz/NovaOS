@@ -1,9 +1,9 @@
 use crate::{
-    AGENTD_LAUNCH_SPEC, AgentCapabilityBundle, AgentControlEvent, AgentDescriptor,
-    AgentLifecycleState, AgentQuotaStatus, AgentRuntimeRecord, AgentSceneParticipationStatus,
-    AgentStateMachine,
+    AGENTD_LAUNCH_SPEC, AGENTD_PAYLOAD_SPEC, AgentCapabilityBundle, AgentControlEvent,
+    AgentDescriptor, AgentLifecycleState, AgentQuotaStatus, AgentRuntimeRecord,
+    AgentSceneParticipationStatus, AgentStateMachine,
 };
-use nova_rt::{NovaAgentId, NovaSceneId, NovaServiceId};
+use nova_rt::{NovaAgentId, NovaPayloadEntryAbi, NovaPayloadKind, NovaSceneId, NovaServiceId};
 
 fn planner_descriptor() -> AgentDescriptor {
     AgentDescriptor {
@@ -127,4 +127,11 @@ fn scene_participation_requires_running_agent_attached_to_scene() {
 fn launch_spec_identifies_agent_service() {
     assert_eq!(AGENTD_LAUNCH_SPEC.descriptor.id, NovaServiceId::AGENTD);
     assert!(AGENTD_LAUNCH_SPEC.is_valid());
+    assert_eq!(AGENTD_LAUNCH_SPEC.artifact, Some(AGENTD_PAYLOAD_SPEC));
+    assert_eq!(AGENTD_PAYLOAD_SPEC.image_stem, "agentd-payload");
+    assert_eq!(AGENTD_PAYLOAD_SPEC.payload_kind, NovaPayloadKind::Service);
+    assert_eq!(
+        AGENTD_PAYLOAD_SPEC.entry_abi,
+        NovaPayloadEntryAbi::BootstrapTaskV1
+    );
 }

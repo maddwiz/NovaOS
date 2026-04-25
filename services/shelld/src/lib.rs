@@ -3,7 +3,7 @@
 pub mod launch;
 pub mod types;
 
-pub use launch::{SHELLD_DESCRIPTOR, SHELLD_LAUNCH_SPEC};
+pub use launch::{SHELLD_DESCRIPTOR, SHELLD_LAUNCH_SPEC, SHELLD_PAYLOAD_SPEC};
 pub use types::{
     ShellAccelDispatchLine, ShellCommand, ShellCommandParseError, ShellIntentProjectionLine,
     ShellMemoryPlacementLine, ShellSceneListLine, ShellServiceStatusLine, describe_accel_dispatch,

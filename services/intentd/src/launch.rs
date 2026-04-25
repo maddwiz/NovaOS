@@ -1,6 +1,6 @@
 use nova_rt::{
-    NovaServiceBootstrapRequirement, NovaServiceDescriptor, NovaServiceId, NovaServiceKind,
-    NovaServiceLaunchSpec,
+    NovaServiceArtifactSpec, NovaServiceBootstrapRequirement, NovaServiceDescriptor, NovaServiceId,
+    NovaServiceKind, NovaServiceLaunchSpec,
 };
 
 pub const INTENTD_DESCRIPTOR: NovaServiceDescriptor = NovaServiceDescriptor::new(
@@ -14,4 +14,8 @@ pub const INTENTD_DESCRIPTOR: NovaServiceDescriptor = NovaServiceDescriptor::new
 pub const INTENTD_LAUNCH_SPEC: NovaServiceLaunchSpec = NovaServiceLaunchSpec::new(
     INTENTD_DESCRIPTOR,
     NovaServiceBootstrapRequirement::core_required(),
-);
+)
+.with_artifact(INTENTD_PAYLOAD_SPEC);
+
+pub const INTENTD_PAYLOAD_SPEC: NovaServiceArtifactSpec =
+    NovaServiceArtifactSpec::service_payload("intentd-payload");

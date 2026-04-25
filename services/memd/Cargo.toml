@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[[bin]]
+name = "memd-payload"
+path = "src/bin/memd_payload.rs"
+
 [dependencies]
 nova_fabric = { path = "../../libs/nova_fabric" }
 nova_rt = { path = "../../libs/nova_rt" }

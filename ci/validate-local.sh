@@ -8,6 +8,7 @@ export PATH="/home/linuxbrew/.linuxbrew/bin:/home/nova/.cargo/bin:/usr/local/sbi
 for script in \
   "${ROOT_DIR}/scripts/novaos-latest.sh" \
   "${ROOT_DIR}/scripts/novaos-env-check.sh" \
+  "${ROOT_DIR}/scripts/build-service-payload.sh" \
   "${ROOT_DIR}/scripts/build-initd.sh" \
   "${ROOT_DIR}/scripts/build-policyd.sh" \
   "${ROOT_DIR}/scripts/build-init-capsule.sh" \

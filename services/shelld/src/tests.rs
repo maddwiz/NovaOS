@@ -1,13 +1,14 @@
 use crate::{
-    SHELLD_LAUNCH_SPEC, ShellCommand, ShellCommandParseError, describe_accel_dispatch,
-    describe_intent_plan, describe_memory_placement, describe_scene, describe_service_status,
-    intent_for_command, parse_command, project_command,
+    SHELLD_LAUNCH_SPEC, SHELLD_PAYLOAD_SPEC, ShellCommand, ShellCommandParseError,
+    describe_accel_dispatch, describe_intent_plan, describe_memory_placement, describe_scene,
+    describe_service_status, intent_for_command, parse_command, project_command,
 };
 use nova_fabric::{MemoryTopologyClass, QueueClass};
 use nova_rt::{
-    NovaAgentId, NovaIntentDispatch, NovaIntentKind, NovaPolicyDecision, NovaSceneDescriptor,
-    NovaSceneId, NovaSceneMode, NovaServiceDescriptor, NovaServiceId, NovaServiceKind,
-    NovaServiceLaunchResult, NovaServiceLaunchStatus, NovaServiceState, NovaServiceStatus,
+    NovaAgentId, NovaIntentDispatch, NovaIntentKind, NovaPayloadEntryAbi, NovaPayloadKind,
+    NovaPolicyDecision, NovaSceneDescriptor, NovaSceneId, NovaSceneMode, NovaServiceDescriptor,
+    NovaServiceId, NovaServiceKind, NovaServiceLaunchResult, NovaServiceLaunchStatus,
+    NovaServiceState, NovaServiceStatus,
 };
 use novaos_acceld::{
     AccelDispatchPlan, AccelDispatchRequest, AccelDispatchStatus, BackendDescriptor,
@@ -37,6 +38,14 @@ fn launch_spec_identifies_optional_shell_service() {
     assert_eq!(SHELLD_LAUNCH_SPEC.descriptor.id, NovaServiceId::SHELLD);
     assert!(!SHELLD_LAUNCH_SPEC.descriptor.required);
     assert!(SHELLD_LAUNCH_SPEC.is_valid());
+    assert_eq!(SHELLD_LAUNCH_SPEC.artifact, Some(SHELLD_PAYLOAD_SPEC));
+    assert_eq!(SHELLD_PAYLOAD_SPEC.image_stem, "shelld-payload");
+    assert_eq!(SHELLD_PAYLOAD_SPEC.payload_kind, NovaPayloadKind::Service);
+    assert_eq!(
+        SHELLD_PAYLOAD_SPEC.entry_abi,
+        NovaPayloadEntryAbi::BootstrapTaskV1
+    );
+    assert!(!SHELLD_PAYLOAD_SPEC.embedded_in_init_capsule);
 }
 
 #[test]

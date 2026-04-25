@@ -4,7 +4,7 @@ pub mod launch;
 pub mod placement;
 pub mod profiles;
 
-pub use launch::{MEMD_DESCRIPTOR, MEMD_LAUNCH_SPEC};
+pub use launch::{MEMD_DESCRIPTOR, MEMD_LAUNCH_SPEC, MEMD_PAYLOAD_SPEC};
 pub use placement::{
     MemoryPlacementGoal, MemoryPlacementPlan, MemoryPlacementRequest, MemoryPlacementStatus,
     plan_memory_placement,
@@ -22,11 +22,11 @@ pub trait MemoryProfile {
 #[cfg(test)]
 mod tests {
     use super::{
-        MEMD_LAUNCH_SPEC, MemoryPlacementGoal, MemoryPlacementRequest, MemoryPlacementStatus,
-        MemoryProfile, plan_memory_placement, profiles,
+        MEMD_LAUNCH_SPEC, MEMD_PAYLOAD_SPEC, MemoryPlacementGoal, MemoryPlacementRequest,
+        MemoryPlacementStatus, MemoryProfile, plan_memory_placement, profiles,
     };
     use nova_fabric::{MemoryPoolKind, MemoryTopologyClass, PlatformClass};
-    use nova_rt::NovaServiceId;
+    use nova_rt::{NovaPayloadEntryAbi, NovaPayloadKind, NovaServiceId};
 
     #[test]
     fn uma_profile_is_spark_focused() {
@@ -55,6 +55,13 @@ mod tests {
     fn launch_spec_identifies_memory_service() {
         assert_eq!(MEMD_LAUNCH_SPEC.descriptor.id, NovaServiceId::MEMD);
         assert!(MEMD_LAUNCH_SPEC.is_valid());
+        assert_eq!(MEMD_LAUNCH_SPEC.artifact, Some(MEMD_PAYLOAD_SPEC));
+        assert_eq!(MEMD_PAYLOAD_SPEC.image_stem, "memd-payload");
+        assert_eq!(MEMD_PAYLOAD_SPEC.payload_kind, NovaPayloadKind::Service);
+        assert_eq!(
+            MEMD_PAYLOAD_SPEC.entry_abi,
+            NovaPayloadEntryAbi::BootstrapTaskV1
+        );
     }
 
     #[test]

@@ -41,9 +41,9 @@ pub use service::{
     NovaAppId, NovaEndpointId, NovaIntentDispatch, NovaIntentEnvelope, NovaIntentKind,
     NovaIntentProjection, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest, NovaPolicyScope,
     NovaSceneDescriptor, NovaSceneId, NovaSceneMode, NovaSceneSwitchRequest,
-    NovaServiceBindingState, NovaServiceBootstrapRequirement, NovaServiceDescriptor, NovaServiceId,
-    NovaServiceKernelBinding, NovaServiceKernelLaunchPlan, NovaServiceKind,
-    NovaServiceLaunchRequest, NovaServiceLaunchResult, NovaServiceLaunchSpec,
+    NovaServiceArtifactSpec, NovaServiceBindingState, NovaServiceBootstrapRequirement,
+    NovaServiceDescriptor, NovaServiceId, NovaServiceKernelBinding, NovaServiceKernelLaunchPlan,
+    NovaServiceKind, NovaServiceLaunchRequest, NovaServiceLaunchResult, NovaServiceLaunchSpec,
     NovaServiceLaunchStatus, NovaServiceState, NovaServiceStatus, NovaSharedMemoryRegionId,
     NovaStatusRequest, NovaTaskId,
 };

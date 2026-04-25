@@ -19,8 +19,12 @@ fn main() {
         let service = report
             .service_report(index)
             .expect("initd service report must match status page");
+        let (artifact_name, artifact_embedded) = match service.artifact {
+            Some(artifact) => (artifact.image_stem, artifact.embedded_in_init_capsule),
+            None => ("none", false),
+        };
         println!(
-            "service name={} kind={} required={} order={} requester=0x{:x} target=0x{:x} scene={} state={} launch={} detail={} policy={} policy_source={} policy_rule={} policy_seq={} binding={} task=0x{:x} endpoint=0x{:x} shm=0x{:x}",
+            "service name={} kind={} required={} order={} requester=0x{:x} target=0x{:x} scene={} artifact={} artifact_embedded={} state={} launch={} detail={} policy={} policy_source={} policy_rule={} policy_seq={} binding={} task=0x{:x} endpoint=0x{:x} shm=0x{:x}",
             service.descriptor.name,
             service.descriptor.kind.label(),
             service.descriptor.required,
@@ -28,6 +32,8 @@ fn main() {
             service.launch_request.requester.0,
             service.launch_request.target.0,
             service.launch_request.scene.0,
+            artifact_name,
+            artifact_embedded,
             service.state.label(),
             service.launch_status.label(),
             service.launch_detail,

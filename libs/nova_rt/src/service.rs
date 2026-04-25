@@ -1,6 +1,7 @@
 use crate::{
     NOVA_INIT_CAPSULE_KNOWN_CAPABILITIES_V1, NOVA_INIT_CAPSULE_SERVICE_NAME_LEN,
-    NovaBootstrapTaskContextV1, NovaInitCapsuleCapabilityV1, encode_init_capsule_service_name,
+    NovaBootstrapTaskContextV1, NovaInitCapsuleCapabilityV1, NovaPayloadEntryAbi, NovaPayloadKind,
+    encode_init_capsule_service_name,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -366,6 +367,55 @@ impl NovaServiceBootstrapRequirement {
 pub struct NovaServiceLaunchSpec {
     pub descriptor: NovaServiceDescriptor,
     pub bootstrap: NovaServiceBootstrapRequirement,
+    pub artifact: Option<NovaServiceArtifactSpec>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NovaServiceArtifactSpec {
+    pub image_stem: &'static str,
+    pub payload_kind: NovaPayloadKind,
+    pub entry_abi: NovaPayloadEntryAbi,
+    pub embedded_in_init_capsule: bool,
+}
+
+impl NovaServiceArtifactSpec {
+    pub const fn new(
+        image_stem: &'static str,
+        payload_kind: NovaPayloadKind,
+        entry_abi: NovaPayloadEntryAbi,
+        embedded_in_init_capsule: bool,
+    ) -> Self {
+        Self {
+            image_stem,
+            payload_kind,
+            entry_abi,
+            embedded_in_init_capsule,
+        }
+    }
+
+    pub const fn service_payload(image_stem: &'static str) -> Self {
+        Self::new(
+            image_stem,
+            NovaPayloadKind::Service,
+            NovaPayloadEntryAbi::BootstrapTaskV1,
+            false,
+        )
+    }
+
+    pub const fn embedded_service_payload(image_stem: &'static str) -> Self {
+        Self::new(
+            image_stem,
+            NovaPayloadKind::Service,
+            NovaPayloadEntryAbi::BootstrapTaskV1,
+            true,
+        )
+    }
+
+    pub const fn is_valid(self) -> bool {
+        !self.image_stem.is_empty()
+            && matches!(self.payload_kind, NovaPayloadKind::Service)
+            && matches!(self.entry_abi, NovaPayloadEntryAbi::BootstrapTaskV1)
+    }
 }
 
 impl NovaServiceLaunchSpec {
@@ -376,6 +426,15 @@ impl NovaServiceLaunchSpec {
         Self {
             descriptor,
             bootstrap,
+            artifact: None,
+        }
+    }
+
+    pub const fn with_artifact(self, artifact: NovaServiceArtifactSpec) -> Self {
+        Self {
+            descriptor: self.descriptor,
+            bootstrap: self.bootstrap,
+            artifact: Some(artifact),
         }
     }
 
@@ -383,6 +442,7 @@ impl NovaServiceLaunchSpec {
         !self.descriptor.id.is_empty()
             && self.bootstrap.is_valid()
             && self.encoded_service_name().is_some()
+            && self.artifact.is_none_or(NovaServiceArtifactSpec::is_valid)
     }
 
     pub const fn launch_request(
@@ -821,6 +881,7 @@ mod tests {
         NovaServiceLaunchStatus, NovaServiceStatus, NovaSharedMemoryRegionId, NovaStatusRequest,
         NovaTaskId,
     };
+    use crate::{NovaPayloadEntryAbi, NovaPayloadKind};
 
     #[test]
     fn service_ids_cover_core_runtime_graph() {
@@ -933,6 +994,54 @@ mod tests {
         assert_eq!(context.service_name(), "agentd");
         assert_eq!(context.endpoint_slots, 1);
         assert_eq!(context.shared_memory_regions, 1);
+    }
+
+    #[test]
+    fn service_launch_spec_accepts_payload_manifest() {
+        let descriptor = super::NovaServiceDescriptor::new(
+            NovaServiceId::POLICYD,
+            "policyd",
+            NovaServiceKind::Core,
+            true,
+            10,
+        );
+        let spec = NovaServiceLaunchSpec::new(
+            descriptor,
+            NovaServiceBootstrapRequirement::core_required(),
+        )
+        .with_artifact(super::NovaServiceArtifactSpec::service_payload(
+            "policyd-payload",
+        ));
+        let artifact = spec.artifact.expect("artifact");
+
+        assert!(spec.is_valid());
+        assert_eq!(artifact.image_stem, "policyd-payload");
+        assert_eq!(artifact.payload_kind, NovaPayloadKind::Service);
+        assert_eq!(artifact.entry_abi, NovaPayloadEntryAbi::BootstrapTaskV1);
+        assert!(!artifact.embedded_in_init_capsule);
+    }
+
+    #[test]
+    fn service_launch_spec_rejects_invalid_payload_manifest() {
+        let descriptor = super::NovaServiceDescriptor::new(
+            NovaServiceId::POLICYD,
+            "policyd",
+            NovaServiceKind::Core,
+            true,
+            10,
+        );
+        let spec = NovaServiceLaunchSpec::new(
+            descriptor,
+            NovaServiceBootstrapRequirement::core_required(),
+        )
+        .with_artifact(super::NovaServiceArtifactSpec::new(
+            "policyd-payload",
+            NovaPayloadKind::Stage1,
+            NovaPayloadEntryAbi::Stage1Plan,
+            false,
+        ));
+
+        assert!(!spec.is_valid());
     }
 
     #[test]

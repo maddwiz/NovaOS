@@ -13,6 +13,7 @@ if [ "${PROFILE}" = "release" ]; then
 fi
 
 PROFILE="${PROFILE}" bash "${ROOT_DIR}/scripts/build-initd.sh" >/dev/null
+PROFILE="${PROFILE}" bash "${ROOT_DIR}/scripts/build-policyd.sh" >/dev/null
 
 check_payload() {
   local stem="$1"
@@ -55,3 +56,4 @@ check_payload() {
 check_payload "stage1-payload" "stage1"
 check_payload "kernel-payload" "kernel"
 check_payload "initd-payload" "service"
+check_payload "policyd-payload" "service"

@@ -1,9 +1,9 @@
 use nova_rt::{
     NovaAgentId, NovaEndpointId, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest,
-    NovaPolicyScope, NovaSceneId, NovaServiceDescriptor, NovaServiceId, NovaServiceKernelBinding,
-    NovaServiceKernelLaunchPlan, NovaServiceKind, NovaServiceLaunchRequest, NovaServiceLaunchSpec,
-    NovaServiceLaunchStatus, NovaServiceState, NovaServiceStatus, NovaSharedMemoryRegionId,
-    NovaTaskId,
+    NovaPolicyScope, NovaSceneId, NovaServiceArtifactSpec, NovaServiceDescriptor, NovaServiceId,
+    NovaServiceKernelBinding, NovaServiceKernelLaunchPlan, NovaServiceKind,
+    NovaServiceLaunchRequest, NovaServiceLaunchSpec, NovaServiceLaunchStatus, NovaServiceState,
+    NovaServiceStatus, NovaSharedMemoryRegionId, NovaTaskId,
 };
 pub use novaos_acceld::{ACCELD_DESCRIPTOR, ACCELD_LAUNCH_SPEC};
 pub use novaos_agentd::{AGENTD_DESCRIPTOR, AGENTD_LAUNCH_SPEC};
@@ -266,6 +266,11 @@ impl InitServiceLaunchPlan {
                 if self.specs[compare].descriptor.id == spec.descriptor.id {
                     return false;
                 }
+                if let (Some(lhs), Some(rhs)) = (spec.artifact, self.specs[compare].artifact) {
+                    if lhs.image_stem == rhs.image_stem {
+                        return false;
+                    }
+                }
                 compare += 1;
             }
             index += 1;
@@ -378,6 +383,7 @@ impl InitKernelLaunchPlanPage {
 pub struct InitRuntimeServiceReport {
     pub descriptor: NovaServiceDescriptor,
     pub launch_request: NovaServiceLaunchRequest,
+    pub artifact: Option<NovaServiceArtifactSpec>,
     pub state: NovaServiceState,
     pub launch_status: NovaServiceLaunchStatus,
     pub launch_detail: u64,
@@ -474,12 +480,14 @@ impl InitRuntimeReport {
     pub fn service_report_for(self, id: NovaServiceId) -> Option<InitRuntimeServiceReport> {
         let status = self.status_page.status_for(id)?;
         let kernel_plan = self.kernel_plan_page.plan_for(id)?;
+        let launch_spec = core_launch_plan().spec_for(id)?;
         let launch_request = service_launch_request(id);
         let policy_audit = service_launch_policy_audit(id, service_launch_sequence(id));
 
         Some(InitRuntimeServiceReport {
             descriptor: status.descriptor,
             launch_request,
+            artifact: launch_spec.artifact,
             state: status.state,
             launch_status: status.last_result.status,
             launch_detail: status.last_result.detail,

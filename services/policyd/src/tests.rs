@@ -1,10 +1,10 @@
 use crate::{
-    POLICY_AUDIT_NO_RULE, POLICYD_LAUNCH_SPEC, PolicyDecisionSource, default_policy_matrix,
-    evaluate_policy, evaluate_policy_with_audit,
+    POLICY_AUDIT_NO_RULE, POLICYD_LAUNCH_SPEC, POLICYD_PAYLOAD_SPEC, PolicyDecisionSource,
+    default_policy_matrix, evaluate_policy, evaluate_policy_with_audit,
 };
 use nova_rt::{
-    NovaAgentId, NovaPolicyAction, NovaPolicyDecision, NovaPolicyRequest, NovaPolicyScope,
-    NovaSceneId, NovaServiceId,
+    NovaAgentId, NovaPayloadEntryAbi, NovaPayloadKind, NovaPolicyAction, NovaPolicyDecision,
+    NovaPolicyRequest, NovaPolicyScope, NovaSceneId, NovaServiceId,
 };
 
 #[test]
@@ -93,6 +93,14 @@ fn audit_record_tracks_self_policy_override() {
 fn launch_spec_identifies_policy_service() {
     assert_eq!(POLICYD_LAUNCH_SPEC.descriptor.id, NovaServiceId::POLICYD);
     assert!(POLICYD_LAUNCH_SPEC.is_valid());
+    assert_eq!(POLICYD_LAUNCH_SPEC.artifact, Some(POLICYD_PAYLOAD_SPEC));
+    assert_eq!(POLICYD_PAYLOAD_SPEC.image_stem, "policyd-payload");
+    assert_eq!(POLICYD_PAYLOAD_SPEC.payload_kind, NovaPayloadKind::Service);
+    assert_eq!(
+        POLICYD_PAYLOAD_SPEC.entry_abi,
+        NovaPayloadEntryAbi::BootstrapTaskV1
+    );
+    assert!(!POLICYD_PAYLOAD_SPEC.embedded_in_init_capsule);
 }
 
 #[test]

@@ -15,9 +15,9 @@ Report links below point to local runtime artifacts; run `make report` if they a
 
 - active_phase: M0 portability refactor + runtime spine with Spark boot continuity
 - repo_root: /home/nova/NovaOS
-- latest_report_generated_at_utc: 20260424T162258Z
-- latest_loop_timestamp_utc: 20260424T162230Z
-- latest_loop_iteration: 6085
+- latest_report_generated_at_utc: 20260425T005244Z
+- latest_loop_timestamp_utc: 20260425T005216Z
+- latest_loop_iteration: 6171
 
 ## Durable Baseline
 
@@ -27,7 +27,7 @@ Report links below point to local runtime artifacts; run `make report` if they a
 - `nova_rt` now carries a Rust mirror of the `BootInfo v2` draft alongside the live v1 handoff
 - `services/acceld` now has backend traits with CPU, GB10, RTX, and Hopper placeholder backends plus a static typed dispatch request/plan model for selecting placeholder backends and fabric queue classes without claiming native accelerator integration yet, and those planner outputs are now surfaced through typed `shelld` inspection lines
 - `services/memd` now has topology-profile traits with UMA, discrete, NVLink, and MIG placeholders plus a static typed placement request/plan model for selecting supported profile pools without claiming real UMA residency policy yet
-- `services/policyd`, `services/agentd`, `services/intentd`, `services/scened`, `services/appbridged`, and `services/shelld` now exist as additive runtime-spine service crates backed by shared `nova_rt` service, policy, agent, intent, scene, app bridge, service status, service-owned launch-spec, kernel-binding, launch-result, and intent-projection contracts, and `apps/initd` now publishes a typed local boot status page plus a launch manifest assembled from those service-owned specs, a per-service launch request plus policyd audit record/decision for each service report, a deterministic kernel-binding plan for the first required service chain, and an operator-readable joined runtime report while deferring optional `shelld`. `policyd` now returns typed audit records for evaluated requests, `shelld` now parses operator commands for the first service spine, projects launch/status/scene-switch commands into typed intent plans, and exposes typed service-status, scene-list, memory-placement-plan, accelerator-dispatch-plan, and intent-projection output lines, `scened` owns typed scene manifests/checkpoints/restore plans, scene-switch planning, and root scene bindings, `appbridged` owns manifest-backed app action support, shared app-action request adapters, and approval routing, `intentd` now projects status, scene switching, app opening, launch requests, and explicit target overrides into shared `nova_rt` dispatch types while still routing policy through `policyd`, and `agentd` now owns lifecycle labels, runtime records, quota snapshots/decisions for tool grants, service delegation, and memory pages, plus scene participation checks
+- `services/policyd`, `services/agentd`, `services/intentd`, `services/scened`, `services/appbridged`, and `services/shelld` now exist as additive runtime-spine service crates backed by shared `nova_rt` service, policy, agent, intent, scene, app bridge, service status, service-owned launch-spec, kernel-binding, launch-result, and intent-projection contracts, and `apps/initd` now publishes a typed local boot status page plus a launch manifest assembled from those service-owned specs, a per-service launch request plus policyd audit record/decision for each service report, a deterministic kernel-binding plan for the first required service chain, and an operator-readable joined runtime report while deferring optional `shelld`. `NovaServiceLaunchSpec` now also carries an optional typed service-payload artifact manifest, `policyd` now returns typed audit records for evaluated requests and carries the first standalone `policyd-payload` manifest plus build/validation path, `shelld` now parses operator commands for the first service spine, projects launch/status/scene-switch commands into typed intent plans, and exposes typed service-status, scene-list, memory-placement-plan, accelerator-dispatch-plan, and intent-projection output lines, `scened` owns typed scene manifests/checkpoints/restore plans, scene-switch planning, and root scene bindings, `appbridged` owns manifest-backed app action support, shared app-action request adapters, and approval routing, `intentd` now projects status, scene switching, app opening, launch requests, and explicit target overrides into shared `nova_rt` dispatch types while still routing policy through `policyd`, and `agentd` now owns lifecycle labels, runtime records, quota snapshots/decisions for tool grants, service delegation, and memory pages, plus scene participation checks
 - `kernel/arch/x86_64` and `drivers/bus/pci` exist as early portability lanes
 - `kernel/arch/arm64/src/lib.rs` is being reduced into focused modules; boot-contract parsing, bringup runtime orchestration, exception-runtime installation, bootstrap transfer/context handling, EL transfer helpers, and diagnostic probes now live outside the root orchestrator
 - `kernel/arch/arm64` now carries validated raw bringup state into the shared runtime and emits early boot-console output over QEMU trace plus framebuffer when present
@@ -55,6 +55,7 @@ Report links below point to local runtime artifacts; run `make report` if they a
 - real Spark hardware acceptance is still missing for the observatory, loader, and kernel milestones because the actual operator/root/reboot flow still has to happen on hardware, and the loader milestone still needs both the returned handoff report and stage0 -> stage1 -> kernel evidence from hardware
 - x86_64, PCI, RTX, and Hopper lanes are placeholders only; no second hardware lane boots yet
 - the service graph is still a typed local runtime model; `initd` now publishes a typed local boot status page, launch manifest, per-service launch requests with policyd audit records/decisions, deterministic kernel-binding plan, and joined operator report for the first service chain, but real kernel task creation, endpoint wiring, shared-memory grants, and kernel-backed service health publication are not integrated yet
+- the first standalone non-`initd` service payload path now exists for `policyd` as a validated build artifact and typed launch-spec manifest, but it is not part of the live boot chain or a real kernel task graph yet
 - timer, IRQ, topology, capability, endpoint routing beyond the first reserved bootstrap slot, shared-memory policy beyond the first reserved bootstrap region, a real EL0 syscall boundary, storage, shell, update, CPU inference, topology-aware `memd`, and native accelerator work are still ahead
 
 ## Latest Automation Status
@@ -71,9 +72,9 @@ Report links below point to local runtime artifacts; run `make report` if they a
 - bootstrap_el0_diagnostic_status: svc_returned_to_el0_spin
 - bootstrap_svc_diagnostic_status: returned
 - bootstrap_trap_diagnostic_status: returned
-- latest_report: /home/nova/NovaOS/artifacts/reports/novaos-report-20260424T162258Z.md
-- latest_loop_log: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260424T162230Z.log
-- latest_loop_summary: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260424T162230Z.summary
+- latest_report: /home/nova/NovaOS/artifacts/reports/novaos-report-20260425T005244Z.md
+- latest_loop_log: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260425T005216Z.log
+- latest_loop_summary: /home/nova/NovaOS/artifacts/reports/novaos-loop-20260425T005216Z.summary
 - latest_bootstrap_kernel_svc_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-kernel-svc-diagnostic-20260422T000906Z.log
 - latest_bootstrap_pretransfer_svc_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-pretransfer-svc-diagnostic-20260418T151905Z.log
 - latest_bootstrap_el0_diagnostic_log: /home/nova/NovaOS/artifacts/reports/bootstrap-el0-diagnostic-20260421T142322Z.log

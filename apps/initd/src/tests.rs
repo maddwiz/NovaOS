@@ -102,6 +102,7 @@ fn core_launch_plan_resolves_policyd_request_and_context() {
         .launch_policy_request_for(NovaServiceId::POLICYD)
         .expect("policyd policy request");
     let spec = plan.spec_for(NovaServiceId::POLICYD).expect("policyd spec");
+    let artifact = spec.artifact.expect("policyd artifact");
     let context = spec.bootstrap_context_v1().expect("bootstrap context");
 
     assert_eq!(request.requester, NovaServiceId::INITD);
@@ -111,6 +112,8 @@ fn core_launch_plan_resolves_policyd_request_and_context() {
         NovaPolicyScope::Service(NovaServiceId::POLICYD)
     );
     assert_eq!(policy, NovaPolicyDecision::Allow);
+    assert_eq!(artifact.image_stem, "policyd-payload");
+    assert!(!artifact.embedded_in_init_capsule);
     assert_eq!(context.service_name(), "policyd");
     assert_eq!(context.endpoint_slots, 1);
     assert_eq!(context.shared_memory_regions, 1);
@@ -147,6 +150,10 @@ fn runtime_report_joins_status_and_kernel_binding() {
     assert_eq!(service.descriptor.id, NovaServiceId::POLICYD);
     assert_eq!(service.launch_request.requester, NovaServiceId::INITD);
     assert_eq!(service.launch_request.target, NovaServiceId::POLICYD);
+    assert_eq!(
+        service.artifact.expect("policyd artifact").image_stem,
+        "policyd-payload"
+    );
     assert_eq!(service.state, NovaServiceState::Running);
     assert_eq!(service.launch_status, NovaServiceLaunchStatus::Started);
     assert_eq!(service.policy_decision(), NovaPolicyDecision::Allow);
@@ -171,6 +178,7 @@ fn runtime_report_keeps_optional_shell_deferred_and_model_only() {
     assert_eq!(service.policy_decision().label(), "allow");
     assert_eq!(service.policy_audit.sequence, 8);
     assert_eq!(service.policy_audit.matched_rule_index, 7);
+    assert_eq!(service.artifact, None);
     assert_eq!(service.kernel_binding.state.label(), "model-only");
     assert!(!service.descriptor.required);
     assert!(service.is_required_healthy());

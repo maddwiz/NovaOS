@@ -9,6 +9,7 @@ for script in \
   "${ROOT_DIR}/scripts/novaos-latest.sh" \
   "${ROOT_DIR}/scripts/novaos-env-check.sh" \
   "${ROOT_DIR}/scripts/build-initd.sh" \
+  "${ROOT_DIR}/scripts/build-policyd.sh" \
   "${ROOT_DIR}/scripts/build-init-capsule.sh" \
   "${ROOT_DIR}/scripts/prepare-spark-hardware-bundle.sh" \
   "${ROOT_DIR}/scripts/install-spark-hardware-bundle.sh" \
@@ -75,6 +76,8 @@ printf 'payload_el0_probe_build=pass\n'
 INITD_FEATURES="qemu_virt_trace,bootstrap_svc_probe,bootstrap_el0_probe" \
   "${ROOT_DIR}/scripts/build-initd.sh" >/dev/null
 printf 'initd_el0_probe_build=pass\n'
+"${ROOT_DIR}/scripts/build-policyd.sh" >/dev/null
+printf 'policyd_payload_build=pass\n'
 "${ROOT_DIR}/scripts/validate-payloads.sh"
 esp_test_dir="$(mktemp -d)"
 init_capsule_build_path="$(mktemp)"

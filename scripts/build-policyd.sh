@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${ROOT_DIR:-$(cd -- "${SCRIPT_DIR}/.." && pwd)}"
+TARGET="${TARGET:-aarch64-unknown-none-softfloat}"
+PROFILE="${PROFILE:-dev}"
+export PATH="/home/linuxbrew/.linuxbrew/bin:/home/nova/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
+profile_dir="debug"
+build_args=()
+if [ "${PROFILE}" = "release" ]; then
+  build_args+=(--release)
+  profile_dir="release"
+fi
+
+crate_dir="${ROOT_DIR}/services/policyd"
+elf_path="${ROOT_DIR}/target/${TARGET}/${profile_dir}/policyd-payload"
+raw_bin_path="${ROOT_DIR}/target/${TARGET}/${profile_dir}/policyd-payload.raw.bin"
+bin_path="${ROOT_DIR}/target/${TARGET}/${profile_dir}/policyd-payload.bin"
+
+cargo rustc --manifest-path "${crate_dir}/Cargo.toml" --bin policyd-payload --target "${TARGET}" \
+  "${build_args[@]}" \
+  -- \
+  -C linker=ld.lld \
+  -C link-arg=-T"${ROOT_DIR}/services/policyd/link.ld"
+
+llvm-objcopy -O binary "${elf_path}" "${raw_bin_path}"
+cargo run -q -p novaos-mkimage -- \
+  --kind service \
+  --input "${raw_bin_path}" \
+  --output "${bin_path}" >/dev/null
+
+printf 'policyd_payload_elf=%s\n' "${elf_path}"
+printf 'policyd_payload_raw_bin=%s\n' "${raw_bin_path}"
+printf 'policyd_payload_bin=%s\n' "${bin_path}"

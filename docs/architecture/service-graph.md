@@ -24,17 +24,17 @@ This service graph is an additive runtime layer inside the existing M0-M17 roadm
 - `appbridged`
 - optional `shelld`
 
-`apps/initd` also publishes a static boot status page for that first runtime spine. Required services are reported as started/running, while optional `shelld` is reported as deferred until an operator shell boundary is needed. The host-side `initd-runtime` binary now prints the joined launch-request/status/policy-audit/kernel-binding report for operator inspection.
+`apps/initd` also publishes a static boot status page for that first runtime spine. Required services are reported as started/running, while optional `shelld` is reported as deferred until an operator shell boundary is needed. The host-side `initd-runtime` binary now prints the joined launch-request/artifact/status/policy-audit/kernel-binding report for operator inspection.
 
 ## Launch Manifest V0
 
 `libs/nova_rt::service` now defines a local launch manifest model:
 
-- `NovaServiceLaunchSpec` binds a service descriptor to bootstrap capability, endpoint-slot, and shared-memory requirements.
+- `NovaServiceLaunchSpec` binds a service descriptor to bootstrap capability, endpoint-slot, and shared-memory requirements plus an optional typed service-payload artifact manifest.
 - `NovaServiceKernelBinding` names the future task, control endpoint, shared-memory region, binding state, and health generation for a service.
 - `NovaServiceKernelLaunchPlan` ties the descriptor, launch request, and future kernel binding together.
 
-Each service crate exports its own descriptor and launch spec. `apps/initd` assembles those service-owned specs into the first runtime manifest and publishes a deterministic kernel-binding plan for required services. Optional `shelld` remains model-only until an operator shell boundary is requested.
+Each service crate exports its own descriptor and launch spec. `apps/initd` assembles those service-owned specs into the first runtime manifest and publishes a deterministic kernel-binding plan for required services. `services/policyd` now carries the first standalone non-`initd` service payload manifest as `policyd-payload`, but that artifact remains outside the live boot lane until real service launch integration exists. Optional `shelld` remains model-only until an operator shell boundary is requested.
 
 `apps/initd` also asks `services/policyd` for the typed audit record attached to each service launch request and report. The current static policy matrix allows launch of the known runtime-spine services and denies unknown service targets, and `policyd` now exposes the decision source, matched rule index, and deterministic launch sequence alongside the decision itself. The first chain remains boot-green while making policyd part of the runtime seam instead of a detached placeholder.
 
